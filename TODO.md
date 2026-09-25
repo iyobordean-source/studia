@@ -22,8 +22,9 @@ This roadmap is phased. Future work remains open until it is implemented and che
 - [x] Keep administrator provisioning out of public signup and document trusted provisioning.
 - [x] Add dependency-free tests for identity route selection and fail-closed status combinations.
 - [x] Add the Admin lecturer-application queue with approve/reject actions through the existing review RPC.
+- [x] Build the authenticated role-aware application shell and Student dashboard with honest empty states.
 
-The identity foundation is applied and verified in the configured Supabase project. The Admin application queue is implemented locally; verify it with an authenticated Admin after deployment. Email confirmation settings remain to be checked.
+The identity/authorization foundation is verified in the configured Supabase project. The authenticated shell and Student dashboard are implemented with no fabricated course or assessment data. Verify the shell and dashboard in the deployed app; email confirmation settings remain to be checked.
 ## Phase 2 â€” Course management and course materials
 
 - [ ] Define the first course and membership workflows.

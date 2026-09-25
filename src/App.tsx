@@ -1,4 +1,4 @@
-﻿import type { PropsWithChildren } from "react";
+import type { PropsWithChildren } from "react";
 import {
   BrowserRouter,
   Navigate,
@@ -7,8 +7,10 @@ import {
   useLocation,
 } from "react-router-dom";
 import { LoaderCircle } from "lucide-react";
-import { AuthProvider, getIdentityDestination, useAuth } from "./auth";
+import { AuthProvider, getIdentityDestination, useAuth, type StudiaRole } from "./auth";
 import { SignInPage, SignUpPage } from "./AuthPages";
+import { AuthenticatedShell } from "./components/AuthenticatedShell";
+import StudentDashboard from "./StudentDashboard";
 import {
   AccountStatusPage,
   IdentityAreaPage,
@@ -80,7 +82,7 @@ function PostAuthResolver() {
   return <Navigate to={getIdentityDestination(profile, lecturerApplication)} replace />;
 }
 
-function IdentityGate({ destination, children }: PropsWithChildren<{ destination: string }>) {
+function IdentityGate({ destination, shellRole, children }: PropsWithChildren<{ destination: string; shellRole?: StudiaRole }>) {
   const { status, profile, profileResolution, lecturerApplication } = useAuth();
   const location = useLocation();
 
@@ -98,7 +100,7 @@ function IdentityGate({ destination, children }: PropsWithChildren<{ destination
   if (resolvedDestination !== destination) {
     return <Navigate to={resolvedDestination} replace />;
   }
-  return children;
+  return shellRole ? <AuthenticatedShell role={shellRole}>{children}</AuthenticatedShell> : children;
 }
 
 export default function App() {
@@ -112,9 +114,9 @@ export default function App() {
           <Route path="/app" element={<PostAuthResolver />} />
           <Route path="/onboarding" element={<IdentityGate destination="/onboarding"><OnboardingPage /></IdentityGate>} />
           <Route path="/lecturer/pending" element={<IdentityGate destination="/lecturer/pending"><LecturerPendingPage /></IdentityGate>} />
-          <Route path="/student" element={<IdentityGate destination="/student"><IdentityAreaPage role="student" /></IdentityGate>} />
-          <Route path="/lecturer" element={<IdentityGate destination="/lecturer"><IdentityAreaPage role="lecturer" /></IdentityGate>} />
-          <Route path="/admin" element={<IdentityGate destination="/admin"><IdentityAreaPage role="admin" /></IdentityGate>} />
+          <Route path="/student" element={<IdentityGate destination="/student" shellRole="student"><StudentDashboard /></IdentityGate>} />
+          <Route path="/lecturer" element={<IdentityGate destination="/lecturer" shellRole="lecturer"><IdentityAreaPage role="lecturer" /></IdentityGate>} />
+          <Route path="/admin" element={<IdentityGate destination="/admin" shellRole="admin"><IdentityAreaPage role="admin" /></IdentityGate>} />
           <Route path="/account-status" element={<IdentityGate destination="/account-status"><AccountStatusPage /></IdentityGate>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

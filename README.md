@@ -4,8 +4,7 @@ Studia is an AI-powered university assessment and course intelligence platform. 
 
 ## Current status
 
-**Identity foundation verified in the configured production project.** Supabase Auth, profile/role/status routing, and identity RLS are in place. The admin route now lists pending lecturer applications and uses the existing review RPC for decisions; the new UI still needs an authenticated Admin check after deployment. Applicant display name and account ID are shown; applicant email is not exposed in the current profile schema. Course data and course schema are not connected. A local Git repository is initialized on `main`; a GitHub remote has not been set up.
-
+**Identity foundation verified in the configured production project.** The authenticated product shell uses the persisted role for navigation, and the Student dashboard greets the user from their profile. Courses, assessments, results, and practice use honest empty states because those data workflows are not built yet. Lecturer and Admin routes remain protected by the existing profile/status checks. The Admin lecturer-application interface uses the existing review RPC; a live check of this new shell/dashboard after deployment remains outstanding. Course data and course schema are not connected. A local Git repository is initialized on `main`; a GitHub remote has not been set up.
 ## Core product loop
 
 Course materials -> Course Brain and course-scoped RAG -> grounded assessment generation -> lecturer review and editing -> published assessment -> student assessment -> grading -> topic performance -> weak-area identification -> targeted practice -> reassessment.

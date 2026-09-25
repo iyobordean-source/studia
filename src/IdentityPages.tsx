@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { LoaderCircle } from "lucide-react";
 import { useAuth, type StudiaRole } from "./auth";
 import { supabase, supabaseConfigurationError } from "./supabase";
+import { SignOutButton } from "./components/AuthenticatedShell";
 
 function IdentityShell({
   kicker,
@@ -32,43 +33,6 @@ function IdentityShell({
         {children}
       </main>
       <footer className="auth-page-footer">Course knowledge, carried forward.</footer>
-    </div>
-  );
-}
-
-export function SignOutButton() {
-  const navigate = useNavigate();
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState("");
-
-  async function signOut() {
-    if (!supabase) {
-      setError(supabaseConfigurationError);
-      return;
-    }
-    setPending(true);
-    setError("");
-    try {
-      const { error: signOutError } = await supabase.auth.signOut();
-      if (signOutError) {
-        setError(signOutError.message);
-        return;
-      }
-      navigate("/sign-in", { replace: true });
-    } catch (signOutError) {
-      setError(signOutError instanceof Error ? signOutError.message : "Unable to sign out. Please try again.");
-    } finally {
-      setPending(false);
-    }
-  }
-
-  return (
-    <div className="identity-actions">
-      <button className="button button-primary" type="button" onClick={signOut} disabled={pending}>
-        {pending && <LoaderCircle aria-hidden="true" size={16} className="auth-spinner" />}
-        {pending ? "Signing out…" : "Sign out"}
-      </button>
-      {error && <p className="auth-error" role="alert">{error}</p>}
     </div>
   );
 }
