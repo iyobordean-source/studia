@@ -1,4 +1,4 @@
-﻿# Roadmap
+# Roadmap
 
 This roadmap is phased. Future work remains open until it is implemented and checked.
 
@@ -17,11 +17,13 @@ This roadmap is phased. Future work remains open until it is implemented and che
 - [ ] Agree the initial application shell and navigation structure.
 - [x] Implement Supabase email/password and Google Auth, session handling, protected routing, and sign-out.
 - [x] Configure the local public Supabase URL and publishable key in ignored `.env.local`.
-- [ ] Apply the identity migration to the Supabase project and verify profile creation, role/status routing, lecturer approval, admin provisioning, and RLS.
+- [x] Apply the identity migration and verify profile creation, role/status routing, lecturer approval, admin provisioning, and RLS in the configured Supabase project.
 - [ ] Configure and verify Supabase email confirmation and OAuth redirect URLs.
 - [x] Keep administrator provisioning out of public signup and document trusted provisioning.
+- [x] Add dependency-free tests for identity route selection and fail-closed status combinations.
+- [x] Add the Admin lecturer-application queue with approve/reject actions through the existing review RPC.
 
-Identity code and migration are in place, but this phase remains open until the migration is applied and the role/RLS verification matrix passes.
+The identity foundation is applied and verified in the configured Supabase project. The Admin application queue is implemented locally; verify it with an authenticated Admin after deployment. Email confirmation settings remain to be checked.
 ## Phase 2 â€” Course management and course materials
 
 - [ ] Define the first course and membership workflows.

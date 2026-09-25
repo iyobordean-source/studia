@@ -1,10 +1,10 @@
-﻿# Architecture
+# Architecture
 
 ## High-level shape
 
 The intended client application uses React, Vite, TypeScript, and Tailwind CSS. Supabase is the planned platform for PostgreSQL data, authentication, and file storage. Gemini is a later AI provider for grounded assessment assistance. Vercel is the intended deployment target. Git and GitHub provide version control and collaboration.
 
-Supabase Auth is connected through the official JavaScript client. The identity schema and authorization rules are defined in `supabase/migrations/20260925_identity_authorization.sql`; they must be applied to the Supabase project before onboarding can use database profiles. Course data, Supabase Storage, AI provider integration, and deployment remain future work.
+Supabase Auth is connected through the official JavaScript client. The identity schema and authorization rules are defined in `supabase/migrations/20260925_identity_authorization.sql` and are applied in the configured production Supabase project. Apply the migration to any new environment before onboarding. Course data, Supabase Storage, AI provider integration, and deployment remain future work.
 
 ## Major application areas
 
@@ -40,11 +40,11 @@ The profile role and account status, together with lecturer application status, 
 - rejected or disabled account → `/account-status`
 - incomplete profile → `/onboarding`
 
-`/app` is a post-authentication resolver, not a shared product area. Browser route guards improve navigation and fail closed when profile resolution fails. They are not data security boundaries.
+`/app` is a post-authentication resolver, not a shared product area. Browser route guards improve navigation and fail closed when profile resolution fails. Dependency-free tests cover their role/status destination rules, but do not verify hosted database behavior. They are not data security boundaries.
 
-The migration enables and forces RLS on identity tables. Users can read their own profile and application; active admins can read records needed for administration. Direct client writes to identity, role, account status, and application decision fields are revoked. Restricted security-definer functions perform onboarding and admin review, with explicit checks and a locked search path. `has_active_role(role)` is the database helper for future course policies; Lecturer checks require an active profile and approved application.
+The migration enables and forces RLS on identity tables. Users can read their own profile and application; active admins can read records needed for administration. Direct client writes to identity, role, account status, and application decision fields are revoked. Restricted security-definer functions perform onboarding and admin review, with explicit checks and a locked search path. The Admin route lists pending applications with applicant profile names and account IDs, then invokes the existing `review_lecturer_application` function for approve/reject decisions. `has_active_role(role)` is the database helper for future course policies; Lecturer checks require an active profile and approved application.
 
-The migration file is not automatically applied to the hosted Supabase project. Apply it through a reviewed Supabase migration workflow or the project SQL Editor before testing onboarding.
+Migration files are not applied automatically to new Supabase environments. Apply them through the reviewed migration workflow before testing onboarding.
 
 For development Admin provisioning, create the intended Auth user through a trusted Dashboard action, then have a project owner run this in the SQL Editor with that user's Auth UUID. Do not add public Admin signup or frontend promotion controls.
 

@@ -1,4 +1,4 @@
-﻿import {
+import {
   createContext,
   useCallback,
   useContext,
@@ -9,6 +9,7 @@
 } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
+export { getIdentityDestination } from "./identity";
 
 export type StudiaRole = "student" | "lecturer" | "admin";
 export type AccountStatus = "onboarding" | "active" | "pending" | "rejected" | "disabled";
@@ -45,29 +46,6 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-
-export function getIdentityDestination(
-  profile: UserProfile,
-  application: LecturerApplication | null,
-) {
-  if (profile.account_status === "onboarding") return "/onboarding";
-  if (profile.account_status === "rejected" || profile.account_status === "disabled") {
-    return "/account-status";
-  }
-  if (
-    profile.role === "lecturer" &&
-    profile.account_status === "pending" &&
-    application?.status === "pending"
-  ) return "/lecturer/pending";
-  if (profile.role === "student" && profile.account_status === "active") return "/student";
-  if (
-    profile.role === "lecturer" &&
-    profile.account_status === "active" &&
-    application?.status === "approved"
-  ) return "/lecturer";
-  if (profile.role === "admin" && profile.account_status === "active") return "/admin";
-  return "/account-status";
-}
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState<Session | null>(null);

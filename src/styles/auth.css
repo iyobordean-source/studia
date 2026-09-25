@@ -410,3 +410,152 @@
     width: 100%;
   }
 }
+
+.admin-placeholder {
+  max-width: 760px;
+}
+
+.admin-review-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+
+.admin-review-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.admin-application-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.admin-application-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.admin-application-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.admin-application-heading h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.admin-application-status {
+  padding: 3px 8px;
+  border: 1px solid #cbd7c8;
+  border-radius: 3px;
+  background: var(--sage);
+  color: var(--deep-moss);
+  font-size: 11px;
+  line-height: 1.4;
+  text-transform: capitalize;
+}
+
+.admin-applicant-id,
+.admin-submitted-date {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.admin-applicant-id code {
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.admin-review-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-review-actions .button,
+.admin-state .button {
+  min-height: 42px;
+  padding-inline: 14px;
+  cursor: pointer;
+}
+
+.admin-review-actions .button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.admin-review-actions .button:focus-visible,
+.admin-state .button:focus-visible {
+  outline: 3px solid #6a8c73;
+  outline-offset: 2px;
+}
+
+.admin-reject-button {
+  border: 1px solid #c8c8bd;
+  background: var(--warm-white);
+  color: var(--ink);
+}
+
+.admin-reject-button:hover:not(:disabled) {
+  border-color: #8d978b;
+  background: #f4f3ed;
+}
+
+.admin-feedback,
+.admin-empty {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 15px 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.admin-success {
+  color: var(--deep-moss);
+}
+
+.admin-state .auth-error {
+  margin-bottom: 12px;
+}
+
+@media (max-width: 600px) {
+  .admin-review-toolbar {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .admin-application-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .admin-review-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .admin-review-actions .button {
+    min-height: 46px;
+  }
+}
