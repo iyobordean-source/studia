@@ -24,13 +24,15 @@ This roadmap is phased. Future work remains open until it is implemented and che
 - [x] Add the Admin lecturer-application queue with approve/reject actions through the existing review RPC.
 - [x] Build the authenticated role-aware application shell and Student dashboard with honest empty states.
 
-The identity/authorization foundation is verified in the configured Supabase project. The authenticated shell and Student dashboard are implemented with honest empty assessment, result, and practice states. The Course Foundation is implemented locally; its migration still needs to be applied and verified in Supabase. Email confirmation settings remain to be checked.
+The identity/authorization foundation is verified in the configured Supabase project. The authenticated shell and Student dashboard are implemented with honest empty assessment, result, and practice states. The Course Foundation migration is applied and verified in the configured Supabase project. Course enrollment UI/RPCs are implemented locally; their migration still needs to be applied and verified. Email confirmation settings remain to be checked.
 ## Phase 2 â€” Course management and course materials
 
-- [x] Define the first course and membership workflows; enrollments are provisioned by trusted operators until a student join flow is specified.
-- [x] Create the minimal course and membership schema with restrictive RLS policies in a migration; hosted application and verification remain pending.
-- [ ] Apply and verify the course foundation migration in the configured Supabase project.
+- [x] Define the initial course and membership workflow; student join requests require lecturer approval.
+- [x] Create the minimal course and membership schema with restrictive RLS policies; the Course Foundation migration is applied and verified.
+- [x] Apply and verify the course foundation migration in the configured Supabase project.
 - [x] Build lecturer course create/list/detail and student enrolled-course list/detail flows.
+- [x] Build lecturer roster management and student course discovery/join requests with atomic lecturer approval/rejection RPCs; the new migration remains to be applied.
+- [ ] Apply and verify the course enrollment workflow migration in the configured Supabase project.
 - [ ] Add course-material upload and storage access controls.
 - [ ] Add lecturer course-material management UI after storage access controls are designed.
 

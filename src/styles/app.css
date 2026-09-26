@@ -615,3 +615,249 @@
     transition: none;
   }
 }
+
+.course-enrollment {
+  min-width: 0;
+}
+
+.course-enrollment > .course-success,
+.course-enrollment-error {
+  margin: 0;
+  padding: 10px 0;
+  color: var(--deep-moss);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.course-enrollment-error {
+  color: #8c382e;
+}
+
+.course-enrollment-search {
+  display: grid;
+  gap: 11px;
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.course-enrollment-search h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.course-enrollment-search > p,
+.course-enrollment-intro {
+  max-width: 620px;
+  margin: 0;
+  color: #555b53;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.course-enrollment-search-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  max-width: 660px;
+  margin-top: 14px;
+}
+
+.course-enrollment-search .course-enrollment-search-form {
+  margin-top: 0;
+}
+
+.course-enrollment-search-form .auth-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.course-enrollment-search-form input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  color: var(--ink);
+  background: var(--warm-white);
+  border: 1px solid #c8c8bd;
+  border-radius: 3px;
+  font: inherit;
+  font-size: 14px;
+}
+
+.course-enrollment-search-form input:focus-visible,
+.course-enrollment .button:focus-visible,
+.course-request-course-link:focus-visible {
+  outline: 3px solid #6a8c73;
+  outline-offset: 2px;
+  border-color: var(--moss);
+}
+
+.course-enrollment-search-form .button {
+  flex: 0 0 auto;
+  min-height: 44px;
+}
+
+.course-enrollment-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.course-enrollment-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 17px;
+  min-width: 0;
+  padding: 14px 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.course-enrollment-person {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.course-enrollment-person strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.course-enrollment-person > span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.course-enrollment-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.course-enrollment-action {
+  min-height: 38px;
+  flex: 0 0 auto;
+}
+
+.course-enrollment .course-empty-state {
+  border-top: 1px solid var(--line);
+}
+
+.course-discovery-section {
+  margin-top: 28px;
+  border-top: 1px solid var(--line);
+}
+
+.course-discovery-section .course-enrollment-intro {
+  margin-bottom: 17px;
+}
+
+.course-discovery-list {
+  margin-top: 18px;
+}
+
+.course-discovery-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 20px;
+  padding: 16px 10px;
+}
+
+.course-discovery-main {
+  display: grid;
+  grid-template-columns: minmax(75px, 0.16fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 18px;
+  min-width: 0;
+}
+
+.course-discovery-action {
+  display: grid;
+  justify-items: end;
+  gap: 9px;
+  max-width: 230px;
+  color: var(--deep-moss);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: right;
+}
+
+.course-enrollment-status {
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.course-request-status {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: capitalize;
+}
+
+.course-request-course-link {
+  width: fit-content;
+  color: inherit;
+  text-decoration-color: #8d978b;
+  text-underline-offset: 3px;
+}
+
+.course-request-course-link:hover {
+  color: var(--deep-moss);
+}
+
+.course-requests-section {
+  margin-top: 22px;
+}
+
+@media (max-width: 650px) {
+  .course-enrollment-search-form {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .course-enrollment-search-form .button {
+    align-self: flex-start;
+  }
+
+  .course-enrollment-row,
+  .course-request-row {
+    align-items: flex-start;
+  }
+
+  .course-enrollment-row:not(.course-request-row) {
+    flex-wrap: wrap;
+  }
+
+  .course-request-row {
+    flex-direction: column;
+  }
+
+  .course-enrollment-actions {
+    width: 100%;
+  }
+
+  .course-discovery-item {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .course-discovery-main {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 7px;
+  }
+
+  .course-discovery-action {
+    justify-items: start;
+    max-width: none;
+    text-align: left;
+  }
+}

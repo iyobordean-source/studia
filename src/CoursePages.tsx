@@ -4,6 +4,7 @@ import { LoaderCircle } from "lucide-react";
 import { useAuth } from "./auth";
 import { courseAreaRoutes } from "./appNavigation";
 import { supabase, supabaseConfigurationError } from "./supabase";
+import { LecturerCourseEnrollment, StudentCourseDiscovery } from "./CourseEnrollment";
 
 type Course = {
   id: string;
@@ -327,7 +328,7 @@ export function StudentCoursesPage() {
           </div>
         ) : courses.length === 0 ? (
           <div className="course-empty-state">
-            <p>You are not enrolled in any courses yet. Courses will appear here once a trusted course administrator associates your account with one.</p>
+            <p>You are not enrolled in any courses yet. Search for a course below and request to join; it will appear here after the lecturer approves your request.</p>
           </div>
         ) : (
           <ul className="course-list" aria-label="Your enrolled courses">
@@ -337,6 +338,8 @@ export function StudentCoursesPage() {
           </ul>
         )}
       </section>
+
+      <StudentCourseDiscovery />
     </div>
   );
 }
@@ -456,6 +459,8 @@ function CourseDetailPage({ audience }: { audience: "student" | "lecturer" }) {
           </div>
         </dl>
       </section>
+
+      {audience === "lecturer" && <LecturerCourseEnrollment courseId={course.id} />}
 
       <section className="course-detail-section course-materials-empty" aria-labelledby="course-materials-title">
         <p className="auth-kicker">COURSE MATERIALS</p>

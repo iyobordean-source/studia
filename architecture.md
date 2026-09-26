@@ -4,7 +4,7 @@
 
 The intended client application uses React, Vite, TypeScript, and Tailwind CSS. Supabase is the planned platform for PostgreSQL data, authentication, and file storage. Gemini is a later AI provider for grounded assessment assistance. Vercel is the intended deployment target. Git and GitHub provide version control and collaboration.
 
-Supabase Auth is connected through the official JavaScript client. The identity schema and authorization rules are defined in `supabase/migrations/20260925_identity_authorization.sql` and are applied in the configured production Supabase project. The course foundation is defined in `supabase/migrations/20260926090000_course_foundation.sql`; it is not applied to the hosted project yet. Apply migrations in filename order in any environment before using their workflows. Supabase Storage, AI provider integration, and deployment remain future work.
+Supabase Auth is connected through the official JavaScript client. The identity schema and authorization rules are defined in `supabase/migrations/20260925_identity_authorization.sql` and are applied in the configured production Supabase project. The Course Foundation migration supabase/migrations/20260926090000_course_foundation.sql is applied and verified in the configured project. The course enrollment workflow is defined in supabase/migrations/20260926120000_course_enrollment_workflow.sql and remains to be applied there. Supabase Storage, AI provider integration, and deployment remain future work.
 
 ## Major application areas
 
@@ -60,7 +60,9 @@ The Course Foundation migration adds `public.courses` and `public.course_members
 
 RLS is enabled and forced on both tables. Active, approved Lecturers can create courses as themselves, read their own courses, and update course name, code, and description. Active Students can read only courses with a membership row. Students cannot change course data. Students can read only their own membership rows, and a course owner can read memberships for courses they own. The `owns_course(uuid)` security-definer helper checks the active Lecturer role and prevents recursive policy evaluation. Authenticated clients have no membership insert, update, or delete grants; course deletion is also not exposed.
 
-There is no student-facing join workflow yet. Until its rules are designed, a trusted project operator can enroll a Student through the Supabase SQL Editor after confirming the intended active profile:
+The course enrollment workflow adds public.course_join_requests with pending, approved, and rejected states. Active Students can search course names/codes and submit a request; submitting a request does not create membership. The owning active, approved Lecturer can search active Student accounts, directly add/remove a student, and review pending requests. Approving a request inserts the membership and records approval in one transaction; rejecting only records the decision. A direct Lecturer add also resolves a matching pending request. Student identity search is limited to the owning Lecturer and returns only active Student accounts. Course discovery returns course details and the Student account enrollment/request state through role-checked RPCs. Authenticated clients have no direct membership or request write grants.
+
+For manual test setup, a trusted project operator can still provision a Student through the Supabase SQL Editor after confirming the intended active profile:
 
 ~~~sql
 insert into public.course_memberships (course_id, student_id)
@@ -68,7 +70,7 @@ values ('<COURSE_UUID>'::uuid, '<STUDENT_PROFILE_UUID>'::uuid)
 on conflict (course_id, student_id) do nothing;
 ~~~
 
-The browser routes reuse the existing identity gates and query courses through RLS. Route checks are a navigation boundary only; table policies remain the data-access boundary. The course migration has not been applied to the hosted project, so these flows are not hosted-project verified.
+The browser routes reuse the existing identity gates. Existing course list/detail reads use course RLS, while enrollment discovery and mutations use the new restricted RPCs. The Course Foundation is hosted-project verified; the separate course enrollment workflow migration remains pending, so its RPC-backed screens are not hosted-project verified until it is applied.
 
 ## Supabase Storage
 
