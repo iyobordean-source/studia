@@ -10,6 +10,8 @@ import { LoaderCircle } from "lucide-react";
 import { AuthProvider, getIdentityDestination, useAuth, type StudiaRole } from "./auth";
 import { SignInPage, SignUpPage } from "./AuthPages";
 import { AuthenticatedShell } from "./components/AuthenticatedShell";
+import { courseAreaRoutes } from "./appNavigation";
+import { LecturerCourseDetailPage, LecturerCoursesPage, StudentCourseDetailPage, StudentCoursesPage } from "./CoursePages";
 import StudentDashboard from "./StudentDashboard";
 import {
   AccountStatusPage,
@@ -115,7 +117,11 @@ export default function App() {
           <Route path="/onboarding" element={<IdentityGate destination="/onboarding"><OnboardingPage /></IdentityGate>} />
           <Route path="/lecturer/pending" element={<IdentityGate destination="/lecturer/pending"><LecturerPendingPage /></IdentityGate>} />
           <Route path="/student" element={<IdentityGate destination="/student" shellRole="student"><StudentDashboard /></IdentityGate>} />
+          <Route path={courseAreaRoutes.student.list} element={<IdentityGate destination={courseAreaRoutes.student.identityDestination} shellRole="student"><StudentCoursesPage /></IdentityGate>} />
+          <Route path={courseAreaRoutes.student.detail} element={<IdentityGate destination={courseAreaRoutes.student.identityDestination} shellRole="student"><StudentCourseDetailPage /></IdentityGate>} />
           <Route path="/lecturer" element={<IdentityGate destination="/lecturer" shellRole="lecturer"><IdentityAreaPage role="lecturer" /></IdentityGate>} />
+          <Route path={courseAreaRoutes.lecturer.list} element={<IdentityGate destination={courseAreaRoutes.lecturer.identityDestination} shellRole="lecturer"><LecturerCoursesPage /></IdentityGate>} />
+          <Route path={courseAreaRoutes.lecturer.detail} element={<IdentityGate destination={courseAreaRoutes.lecturer.identityDestination} shellRole="lecturer"><LecturerCourseDetailPage /></IdentityGate>} />
           <Route path="/admin" element={<IdentityGate destination="/admin" shellRole="admin"><IdentityAreaPage role="admin" /></IdentityGate>} />
           <Route path="/account-status" element={<IdentityGate destination="/account-status"><AccountStatusPage /></IdentityGate>} />
           <Route path="*" element={<Navigate to="/" replace />} />

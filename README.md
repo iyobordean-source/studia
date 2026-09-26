@@ -4,7 +4,7 @@ Studia is an AI-powered university assessment and course intelligence platform. 
 
 ## Current status
 
-**Identity foundation verified in the configured production project.** The authenticated product shell uses the persisted role for navigation, and the Student dashboard greets the user from their profile. Courses, assessments, results, and practice use honest empty states because those data workflows are not built yet. Lecturer and Admin routes remain protected by the existing profile/status checks. The Admin lecturer-application interface uses the existing review RPC; a live check of this new shell/dashboard after deployment remains outstanding. Course data and course schema are not connected. A local Git repository is initialized on `main`; a GitHub remote has not been set up.
+**Identity foundation verified in the configured production project.** The authenticated product shell uses the persisted role for navigation, and the Student dashboard greets the user from their profile. Assessment, result, and practice areas retain honest empty states; lecturer and student course flows are implemented locally. Lecturer and Admin routes remain protected by the existing profile/status checks. The Admin lecturer-application interface uses the existing review RPC; a live check of this new shell/dashboard after deployment remains outstanding. The course migration has not been applied to the hosted project, so course workflows are not yet live or production-verified. A local Git repository is initialized on `main`; a GitHub remote has not been set up.
 ## Core product loop
 
 Course materials -> Course Brain and course-scoped RAG -> grounded assessment generation -> lecturer review and editing -> published assessment -> student assessment -> grading -> topic performance -> weak-area identification -> targeted practice -> reassessment.
@@ -15,7 +15,7 @@ Course materials -> Course Brain and course-scoped RAG -> grounded assessment ge
 - React Router
 - Tailwind CSS
 - Supabase JavaScript client and Auth
-- Supabase Postgres identity tables and RLS are active in the configured project; course tables and Storage remain future work
+- Supabase Postgres identity tables and RLS are active in the configured project; the course schema/RLS migration is present locally but has not been applied; Storage remains future work
 - Gemini API, planned provider for V1 grounded AI; RAG/source grounding is a V1 capability, not yet implemented
 - Vercel, intended deployment target
 - Git and GitHub
@@ -44,9 +44,19 @@ npm run dev
 
 Vite prints a local URL after the development server starts.
 
-The dependency-free `npm run test:identity` suite covers client route selection only; it does not verify hosted profile RPCs or RLS. The configured production project already has `supabase/migrations/20260925_identity_authorization.sql` applied. Apply it to any new Supabase project before onboarding. The migration creates non-privileged onboarding profiles, lecturer applications, and restrictive identity RLS/function policies. Email confirmation and Google OAuth return to `/app`, which resolves the persisted profile and routes to onboarding or the role area. Add the local and production `/app` destinations to Supabase Auth URL Configuration.
+The dependency-free `npm run test:identity` suite covers identity route selection and role navigation; it does not verify hosted profile RPCs or RLS. The configured production project already has `supabase/migrations/20260925_identity_authorization.sql` applied. The course migration `supabase/migrations/20260926090000_course_foundation.sql` is created but has not been applied to that project. Apply migrations in filename order before using the course screens. The identity migration creates non-privileged onboarding profiles, lecturer applications, and restrictive identity RLS/function policies. Email confirmation and Google OAuth return to `/app`, which resolves the persisted profile and routes to onboarding or the role area. Add the local and production `/app` destinations to Supabase Auth URL Configuration.
 
 For development Admin provisioning, create the intended Auth user through a trusted Supabase Dashboard action, then have a project owner run this in the SQL Editor with that user Auth UUID. Do not add public Admin signup or frontend promotion controls. The migration `review_lecturer_application` function checks active Admin status.
+
+Until a student-facing join mechanism is designed, enrollments are provisioned manually by a trusted project operator through the Supabase SQL Editor. Confirm the intended active Student profile and course before running:
+
+~~~sql
+insert into public.course_memberships (course_id, student_id)
+values ('<COURSE_UUID>'::uuid, '<STUDENT_PROFILE_UUID>'::uuid)
+on conflict (course_id, student_id) do nothing;
+~~~
+
+Authenticated clients cannot write membership rows. The database migration must be applied before lecturer course creation or student course listing can work.
 
 ```sql
 update public.profiles

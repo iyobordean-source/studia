@@ -13,7 +13,7 @@
 - Never replace a working system with a different approach without justification.
 - Keep code understandable and business logic easy to find.
 - Flag uncertainty and ask for clarification when a requirement cannot be inferred safely; do not invent requirements.
-- Implement one approved vertical slice at a time. The email/password and Google authentication foundation, role-aware profiles, authorization, and initial authenticated Student experience are implemented. Preserve those foundations; do not jump ahead to course, Course Brain, assessment, or AI/RAG features unless that slice is selected.
+- Implement one approved vertical slice at a time. The email/password and Google authentication foundation, role-aware profiles, authorization, initial authenticated Student experience, and Course Foundation are implemented. Preserve those foundations; do not jump ahead to materials, Course Brain, assessments, or AI/RAG features unless that slice is selected.
 - Treat database-backed roles, account/application status, and RLS as authorization sources. Never grant privileged access from frontend state or user metadata.
 
 

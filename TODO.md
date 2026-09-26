@@ -20,17 +20,19 @@ This roadmap is phased. Future work remains open until it is implemented and che
 - [x] Apply the identity migration and verify profile creation, role/status routing, lecturer approval, admin provisioning, and RLS in the configured Supabase project.
 - [ ] Configure and verify Supabase email confirmation and OAuth redirect URLs.
 - [x] Keep administrator provisioning out of public signup and document trusted provisioning.
-- [x] Add dependency-free tests for identity route selection and fail-closed status combinations.
+- [x] Add dependency-free tests for identity route selection, role navigation, and fail-closed status combinations.
 - [x] Add the Admin lecturer-application queue with approve/reject actions through the existing review RPC.
 - [x] Build the authenticated role-aware application shell and Student dashboard with honest empty states.
 
-The identity/authorization foundation is verified in the configured Supabase project. The authenticated shell and Student dashboard are implemented with no fabricated course or assessment data. Verify the shell and dashboard in the deployed app; email confirmation settings remain to be checked.
+The identity/authorization foundation is verified in the configured Supabase project. The authenticated shell and Student dashboard are implemented with honest empty assessment, result, and practice states. The Course Foundation is implemented locally; its migration still needs to be applied and verified in Supabase. Email confirmation settings remain to be checked.
 ## Phase 2 â€” Course management and course materials
 
-- [ ] Define the first course and membership workflows.
-- [ ] Design and review the minimal database model and RLS policies for courses.
+- [x] Define the first course and membership workflows; enrollments are provisioned by trusted operators until a student join flow is specified.
+- [x] Create the minimal course and membership schema with restrictive RLS policies in a migration; hosted application and verification remain pending.
+- [ ] Apply and verify the course foundation migration in the configured Supabase project.
+- [x] Build lecturer course create/list/detail and student enrolled-course list/detail flows.
 - [ ] Add course-material upload and storage access controls.
-- [ ] Add lecturer course and material management UI.
+- [ ] Add lecturer course-material management UI after storage access controls are designed.
 
 ## Phase 3 â€” Course Brain
 

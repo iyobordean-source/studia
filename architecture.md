@@ -4,7 +4,7 @@
 
 The intended client application uses React, Vite, TypeScript, and Tailwind CSS. Supabase is the planned platform for PostgreSQL data, authentication, and file storage. Gemini is a later AI provider for grounded assessment assistance. Vercel is the intended deployment target. Git and GitHub provide version control and collaboration.
 
-Supabase Auth is connected through the official JavaScript client. The identity schema and authorization rules are defined in `supabase/migrations/20260925_identity_authorization.sql` and are applied in the configured production Supabase project. Apply the migration to any new environment before onboarding. Course data, Supabase Storage, AI provider integration, and deployment remain future work.
+Supabase Auth is connected through the official JavaScript client. The identity schema and authorization rules are defined in `supabase/migrations/20260925_identity_authorization.sql` and are applied in the configured production Supabase project. The course foundation is defined in `supabase/migrations/20260926090000_course_foundation.sql`; it is not applied to the hosted project yet. Apply migrations in filename order in any environment before using their workflows. Supabase Storage, AI provider integration, and deployment remain future work.
 
 ## Major application areas
 
@@ -21,7 +21,7 @@ These are product areas, not a prescribed folder structure. Keep implementation 
 
 Lecturers add course materials, which are stored with access controlled by the course. The application will use those materials to build course-specific context for assessment generation. A lecturer reviews and edits proposed questions before publishing an assessment. Students complete published assessments. Results feed course-level performance analysis and targeted practice.
 
-The identity schema is defined in the migration described below. The course, membership, material, assessment, and processing schemas remain open until their first vertical slices are designed.
+The identity schema is defined in the migration described below. The minimal course and membership schema is defined in the Course Foundation migration. Material, assessment, and processing schemas remain open until their own vertical slices are designed.
 
 ## Authentication, profiles, roles, and route authorization
 
@@ -53,6 +53,22 @@ update public.profiles
 set role = 'admin', account_status = 'active'
 where user_id = '<AUTH_USER_UUID>'::uuid;
 ```
+
+## Course foundation and access
+
+The Course Foundation migration adds `public.courses` and `public.course_memberships`. Each course has one `lecturer_id` referencing `profiles.user_id`, a name, a code unique per lecturer without regard to letter case, an optional description, and timestamps. A membership links one course to one Student profile; its course/student pair is unique.
+
+RLS is enabled and forced on both tables. Active, approved Lecturers can create courses as themselves, read their own courses, and update course name, code, and description. Active Students can read only courses with a membership row. Students cannot change course data. Students can read only their own membership rows, and a course owner can read memberships for courses they own. The `owns_course(uuid)` security-definer helper checks the active Lecturer role and prevents recursive policy evaluation. Authenticated clients have no membership insert, update, or delete grants; course deletion is also not exposed.
+
+There is no student-facing join workflow yet. Until its rules are designed, a trusted project operator can enroll a Student through the Supabase SQL Editor after confirming the intended active profile:
+
+~~~sql
+insert into public.course_memberships (course_id, student_id)
+values ('<COURSE_UUID>'::uuid, '<STUDENT_PROFILE_UUID>'::uuid)
+on conflict (course_id, student_id) do nothing;
+~~~
+
+The browser routes reuse the existing identity gates and query courses through RLS. Route checks are a navigation boundary only; table policies remain the data-access boundary. The course migration has not been applied to the hosted project, so these flows are not hosted-project verified.
 
 ## Supabase Storage
 

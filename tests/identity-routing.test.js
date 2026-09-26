@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getIdentityDestination } from "../src/identity.ts";
+import { courseAreaRoutes, roleNavigation } from "../src/appNavigation.ts";
 
 const profile = (role, account_status) => ({ role, account_status });
 const application = (status) => ({ status });
@@ -36,4 +37,24 @@ test("routes rejected and disabled profiles to restricted status", () => {
 
 test("fails closed for inconsistent role and status combinations", () => {
   assert.equal(getIdentityDestination(profile("student", "pending"), application("pending")), "/account-status");
+});
+
+test("student course routes use the existing student identity gate destination", () => {
+  assert.equal(courseAreaRoutes.student.list, "/student/courses");
+  assert.equal(courseAreaRoutes.student.detail, "/student/courses/:courseId");
+  assert.equal(courseAreaRoutes.student.identityDestination, "/student");
+});
+
+test("lecturer course routes use the existing approved lecturer identity gate destination", () => {
+  assert.equal(courseAreaRoutes.lecturer.list, "/lecturer/courses");
+  assert.equal(courseAreaRoutes.lecturer.detail, "/lecturer/courses/:courseId");
+  assert.equal(courseAreaRoutes.lecturer.identityDestination, "/lecturer");
+});
+
+test("course navigation is role-specific and admin navigation remains unchanged", () => {
+  assert.ok(roleNavigation.student.some((item) => item.to === courseAreaRoutes.student.list));
+  assert.ok(roleNavigation.lecturer.some((item) => item.to === courseAreaRoutes.lecturer.list));
+  assert.ok(roleNavigation.student.every((item) => !item.to.startsWith("/lecturer")));
+  assert.ok(roleNavigation.lecturer.every((item) => !item.to.startsWith("/student")));
+  assert.deepEqual(roleNavigation.admin.map((item) => item.to), ["/admin"]);
 });

@@ -2,31 +2,8 @@ import { useEffect, useState, type PropsWithChildren } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { LoaderCircle } from "lucide-react";
 import { useAuth, type StudiaRole } from "../auth";
+import { roleLabels, roleNavigation } from "../appNavigation";
 import { supabase, supabaseConfigurationError } from "../supabase";
-
-type NavigationItem = {
-  label: string;
-  to: string;
-  section?: string;
-};
-
-const roleLabels: Record<StudiaRole, string> = {
-  student: "Student workspace",
-  lecturer: "Lecturer workspace",
-  admin: "Administration",
-};
-
-const roleNavigation: Record<StudiaRole, NavigationItem[]> = {
-  student: [
-    { label: "Overview", to: "/student" },
-    { label: "Courses", to: "/student#courses", section: "courses" },
-    { label: "Assessments", to: "/student#assessments", section: "assessments" },
-    { label: "Results", to: "/student#results", section: "results" },
-    { label: "Weak areas & practice", to: "/student#practice", section: "practice" },
-  ],
-  lecturer: [{ label: "Lecturer area", to: "/lecturer" }],
-  admin: [{ label: "Lecturer applications", to: "/admin" }],
-};
 
 export function SignOutButton() {
   const navigate = useNavigate();
@@ -92,7 +69,8 @@ export function AuthenticatedShell({
           {roleNavigation[role].map((item) => {
             const active = item.section
               ? location.pathname === `/${role}` && location.hash === `#${item.section}`
-              : location.pathname === item.to && (!location.hash || role !== "student");
+              : (location.pathname === item.to && (!location.hash || item.to !== `/${role}`))
+                || location.pathname.startsWith(`${item.to}/`);
             return (
               <Link
                 className={`app-navigation-link${active ? " is-active" : ""}`}
