@@ -4,7 +4,7 @@
 
 The intended client application uses React, Vite, TypeScript, and Tailwind CSS. Supabase is the planned platform for PostgreSQL data, authentication, and file storage. Gemini is a later AI provider for grounded assessment assistance. Vercel is the intended deployment target. Git and GitHub provide version control and collaboration.
 
-Supabase Auth is connected through the official JavaScript client. The identity schema and authorization rules are defined in `supabase/migrations/20260925_identity_authorization.sql` and are applied in the configured production Supabase project. The Course Foundation migration supabase/migrations/20260926090000_course_foundation.sql is applied and verified in the configured project. The course enrollment workflow is defined in supabase/migrations/20260926120000_course_enrollment_workflow.sql and remains to be applied there. Supabase Storage, AI provider integration, and deployment remain future work.
+Supabase Auth is connected through the official JavaScript client. The identity, Course Foundation, and Course Enrollment Workflow migrations are applied and verified in the configured production Supabase project. Course Materials Foundation is defined in supabase/migrations/20260926140000_course_materials_foundation.sql; it creates private Storage configuration and policies but remains to be applied. AI provider integration and deployment remain future work.
 
 ## Major application areas
 
@@ -21,7 +21,7 @@ These are product areas, not a prescribed folder structure. Keep implementation 
 
 Lecturers add course materials, which are stored with access controlled by the course. The application will use those materials to build course-specific context for assessment generation. A lecturer reviews and edits proposed questions before publishing an assessment. Students complete published assessments. Results feed course-level performance analysis and targeted practice.
 
-The identity schema is defined in the migration described below. The minimal course and membership schema is defined in the Course Foundation migration. Material, assessment, and processing schemas remain open until their own vertical slices are designed.
+The identity, course, enrollment, and course-material schemas are defined in their respective migrations. Assessment and processing schemas remain open until their own vertical slices are designed.
 
 ## Authentication, profiles, roles, and route authorization
 
@@ -70,11 +70,15 @@ values ('<COURSE_UUID>'::uuid, '<STUDENT_PROFILE_UUID>'::uuid)
 on conflict (course_id, student_id) do nothing;
 ~~~
 
-The browser routes reuse the existing identity gates. Existing course list/detail reads use course RLS, while enrollment discovery and mutations use the new restricted RPCs. The Course Foundation is hosted-project verified; the separate course enrollment workflow migration remains pending, so its RPC-backed screens are not hosted-project verified until it is applied.
+The browser routes reuse the existing identity gates. Existing course list/detail reads use course RLS, while enrollment discovery and mutations use restricted RPCs. Course Foundation and Course Enrollment Workflow are applied and manually verified in the configured project.
 
-## Supabase Storage
+## Course materials and Storage
 
-Supabase Storage is the intended home for course-material files. Access should be limited to authorised course participants and staff according to the final product rules. Validate file type and size, keep storage paths tied to authorised records, and avoid public buckets for private course content unless a deliberate product requirement justifies them.
+The Course Materials Foundation migration adds public.course_materials with a course foreign key, title, optional description, file name, MIME type, size, timestamps, and a deterministic storage_path in the form course_id/material_id/file_name. V1 uploads are PDF only, limited to 20 MB. The migration creates a private course-materials bucket restricted to application/pdf and 20 MB.
+
+Forced table RLS lets the owning active, approved Lecturer read/create/update/delete their course material metadata. An active Student can read metadata only when a course_memberships row enrolls them in that course. Students and unauthenticated users cannot write material records.
+
+Storage object policies use the same course ownership and enrollment checks. Upload and delete paths must begin with the owned course UUID and contain a material UUID and PDF filename. Reads additionally require a matching visible course_materials row, so guessing another course path does not grant access. Files are uploaded, downloaded, and removed through the authenticated Supabase Storage API; the client does not write Storage tables. The material record is created after upload, and failed record creation triggers a best-effort object cleanup. Deletion removes the object before its metadata row. The migration has not been applied to the hosted project, so live Storage policy behavior remains to be verified.
 
 ## AI and data boundaries
 

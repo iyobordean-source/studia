@@ -5,6 +5,7 @@ import { useAuth } from "./auth";
 import { courseAreaRoutes } from "./appNavigation";
 import { supabase, supabaseConfigurationError } from "./supabase";
 import { LecturerCourseEnrollment, StudentCourseDiscovery } from "./CourseEnrollment";
+import { CourseMaterialsSection } from "./CourseMaterials";
 
 type Course = {
   id: string;
@@ -462,15 +463,11 @@ function CourseDetailPage({ audience }: { audience: "student" | "lecturer" }) {
 
       {audience === "lecturer" && <LecturerCourseEnrollment courseId={course.id} />}
 
-      <section className="course-detail-section course-materials-empty" aria-labelledby="course-materials-title">
-        <p className="auth-kicker">COURSE MATERIALS</p>
-        <h2 id="course-materials-title">Materials will appear here later.</h2>
-        <p>
-          {audience === "lecturer"
-            ? "Course materials and Course Brain preparation are not available yet."
-            : "Your lecturer has not added course materials here yet. Course learning support will be introduced in a later Studia step."}
-        </p>
-      </section>
+      <CourseMaterialsSection
+        key={course.id}
+        courseId={course.id}
+        canManage={audience === "lecturer"}
+      />
     </div>
   );
 }

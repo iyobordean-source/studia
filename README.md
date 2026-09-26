@@ -4,7 +4,7 @@ Studia is an AI-powered university assessment and course intelligence platform. 
 
 ## Current status
 
-**Identity foundation and Course Foundation are verified in the configured Supabase project.** Student and approved lecturer access use persisted profile status. The role-aware application shell, Student dashboard, lecturer course management, and student enrolled-course pages are implemented. Course enrollment requests, student discovery, and lecturer roster/review screens are now implemented locally in a new migration and UI; apply and verify supabase/migrations/20260926120000_course_enrollment_workflow.sql before using that workflow. The new enrollment migration has not been applied. Assessment, results, practice, course materials, and Course Brain remain future work. A local Git repository is initialized on main; a GitHub remote has not been set up.
+**Identity, Course Foundation, and Course Enrollment Workflow are applied and verified in the configured Supabase project.** Student and approved lecturer access use persisted profile status. The role-aware application shell, Student dashboard, course management, enrollment requests, and lecturer review are working in the live deployment. Course Materials Foundation now has a local migration and UI for private PDF upload, listing, download, and deletion; that migration has not been applied or live-verified. Course Brain/RAG, assessments, results, and practice remain future work. A local Git repository is initialized on main; a GitHub remote has not been set up.
 ## Core product loop
 
 Course materials -> Course Brain and course-scoped RAG -> grounded assessment generation -> lecturer review and editing -> published assessment -> student assessment -> grading -> topic performance -> weak-area identification -> targeted practice -> reassessment.
@@ -15,13 +15,13 @@ Course materials -> Course Brain and course-scoped RAG -> grounded assessment ge
 - React Router
 - Tailwind CSS
 - Supabase JavaScript client and Auth
-- Supabase Postgres identity and Course Foundation tables/RLS are active in the configured project; the new course enrollment workflow migration is local and not yet applied; Storage remains future work
+- Supabase identity, Course Foundation, and Course Enrollment Workflow migrations are applied and verified; the Course Materials Foundation migration locally defines private PDF metadata and Storage policies but is not yet applied
 - Gemini API, planned provider for V1 grounded AI; RAG/source grounding is a V1 capability, not yet implemented
 - Vercel, intended deployment target
 - Git and GitHub
 - Lucide React for interface icons
 
-Only the libraries needed for the current scope are installed. Supabase Auth, identity data, and Course Foundation data are connected; the enrollment workflow depends on its pending migration. Storage and Gemini are not connected.
+Only the libraries needed for the current scope are installed. Supabase Auth, identity, courses, enrollment, and their verified RLS foundations are connected. Course Materials code is ready locally and awaits its migration; Gemini and Course Brain/RAG are not connected.
 
 ## Documentation
 
@@ -44,7 +44,7 @@ npm run dev
 
 Vite prints a local URL after the development server starts.
 
-The dependency-free npm run test:identity suite covers identity routing, role navigation, course join-action states, and static enrollment migration contracts; it does not execute hosted RPCs or verify live RLS. The configured production project has supabase/migrations/20260925_identity_authorization.sql and supabase/migrations/20260926090000_course_foundation.sql applied and verified. Apply supabase/migrations/20260926120000_course_enrollment_workflow.sql before using course discovery, join requests, lecturer roster management, or review actions. The identity migration creates non-privileged onboarding profiles, lecturer applications, and restrictive identity RLS/function policies. Email confirmation and Google OAuth return to `/app`, which resolves the persisted profile and routes to onboarding or the role area. Add the local and production `/app` destinations to Supabase Auth URL Configuration.
+The dependency-free npm run test:identity suite covers identity routing, role navigation, course join-action states, and static course enrollment/material migration contracts; it does not execute hosted RPCs or verify live RLS. The configured production project has the identity, Course Foundation, and Course Enrollment Workflow migrations applied and manually verified. Apply supabase/migrations/20260926140000_course_materials_foundation.sql before using material upload, listing, or downloads. The identity migration creates non-privileged onboarding profiles, lecturer applications, and restrictive identity RLS/function policies. Email confirmation and Google OAuth return to `/app`, which resolves the persisted profile and routes to onboarding or the role area. Add the local and production `/app` destinations to Supabase Auth URL Configuration.
 
 For development Admin provisioning, create the intended Auth user through a trusted Supabase Dashboard action, then have a project owner run this in the SQL Editor with that user Auth UUID. Do not add public Admin signup or frontend promotion controls. The migration `review_lecturer_application` function checks active Admin status.
 
