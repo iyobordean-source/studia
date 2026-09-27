@@ -20,6 +20,7 @@ const sourceMigration = readFileSync(
 );
 const clientSource = readFileSync(new URL("../src/CourseMaterials.tsx", import.meta.url), "utf8");
 const processorSource = readFileSync(new URL("../api/process-course-source.ts", import.meta.url), "utf8");
+const vercelConfig = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8"));
 
 function makePdf(pages) {
   const fontId = 3 + pages.length * 2;
@@ -104,6 +105,10 @@ function processorState({ status = "pending", extractedText = null, authorized =
 test("PDF parsing is deferred until processing so runtime import failures are contained", async () => {
   assert.doesNotMatch(processorSource, /^import\s+\{\s*getDocument\s*\}\s+from\s+["']pdfjs-dist\/legacy\/build\/pdf\.mjs["']/m);
   assert.match(processorSource, /await import\(["']pdfjs-dist\/legacy\/build\/pdf\.mjs["']\)/);
+  assert.equal(
+    vercelConfig.functions["api/process-course-source.ts"].includeFiles,
+    "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+  );
   const extracted = await extractPdfText(makePdf(["Chapter One", "Chapter Two"]));
   assert.match(extracted, /Chapter One/);
   assert.match(extracted, /Chapter Two/);
