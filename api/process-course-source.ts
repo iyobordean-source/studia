@@ -1,6 +1,4 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-
 
 const maxPdfBytes = 20 * 1024 * 1024;
 const maxExtractedBytes = 5 * 1024 * 1024;
@@ -36,12 +34,16 @@ function isPdfHeader(bytes: Uint8Array) {
 }
 
 export async function extractPdfText(pdfBytes: Uint8Array): Promise<string> {
-  const loadingTask = getDocument({
-    data: new Uint8Array(pdfBytes),
-    isEvalSupported: false,
-    useSystemFonts: true,
-  });
+  let destroyLoadingTask: (() => Promise<void>) | undefined;
   try {
+    const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const loadingTask = getDocument({
+      data: new Uint8Array(pdfBytes),
+      isEvalSupported: false,
+      useSystemFonts: true,
+    });
+    destroyLoadingTask = () => loadingTask.destroy();
+
     const pdf = await loadingTask.promise;
     const pages: string[] = [];
     const textEncoder = new TextEncoder();
@@ -65,9 +67,9 @@ export async function extractPdfText(pdfBytes: Uint8Array): Promise<string> {
     return pages.filter(Boolean).join("\n\n").trim();
   } catch (error) {
     if (error instanceof ProcessingFailure) throw error;
-    throw new ProcessingFailure("Unable to read this PDF. Check that it is valid and is not password protected, then try again.");
+    throw new ProcessingFailure("Unable to initialize or read this PDF. Check that it is valid and is not password protected, then try again.");
   } finally {
-    await loadingTask.destroy();
+    await destroyLoadingTask?.();
   }
 }
 
@@ -230,25 +232,40 @@ export default {
       return jsonResponse(503, { error: "Server-side course processing is not configured." });
     }
 
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: `Bearer ${bearer}` } },
-      auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
-    });
-    const { data: authData, error: authError } = await userClient.auth.getUser(bearer);
-    if (authError || !authData.user) {
-      return jsonResponse(401, { error: "Your session is invalid or has expired. Sign in again and retry." });
-    }
-
-    const serviceClient = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
-    });
+    let stage = "authenticated Supabase client setup";
     try {
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: `Bearer ${bearer}` } },
+        auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
+      });
+
+      stage = "caller session validation";
+      const { data: authData, error: authError } = await userClient.auth.getUser(bearer);
+      if (authError || !authData.user) {
+        return jsonResponse(401, { error: "Your session is invalid or has expired. Sign in again and retry." });
+      }
+
+      stage = "server Supabase client setup";
+      const serviceClient = createClient(supabaseUrl, serviceRoleKey, {
+        auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
+      });
+
+      stage = "course source processing";
       const result = await processCourseSource(body.sourceId, createProcessorDependencies(userClient, serviceClient));
       return jsonResponse(200, result);
     } catch (error) {
       if (error instanceof CourseSourceRequestError) {
         return jsonResponse(error.statusCode, { error: error.message });
       }
+
+      const rawMessage = error instanceof Error
+        ? error.name + ": " + error.message
+        : "Unknown error";
+      const safeMessage = [bearer, supabaseUrl, anonKey, serviceRoleKey]
+        .filter((secret): secret is string => Boolean(secret))
+        .reduce((message, secret) => message.replaceAll(secret, "[redacted]"), rawMessage)
+        .slice(0, 500);
+      console.error("[process-course-source] Request failed", { stage, error: safeMessage });
       return jsonResponse(500, { error: "Course source processing could not be completed. Try again later." });
     }
   },

@@ -19,6 +19,7 @@ const sourceMigration = readFileSync(
   "utf8",
 );
 const clientSource = readFileSync(new URL("../src/CourseMaterials.tsx", import.meta.url), "utf8");
+const processorSource = readFileSync(new URL("../api/process-course-source.ts", import.meta.url), "utf8");
 
 function makePdf(pages) {
   const fontId = 3 + pages.length * 2;
@@ -100,7 +101,9 @@ function processorState({ status = "pending", extractedText = null, authorized =
   return { state, dependencies };
 }
 
-test("PDF text extraction reads every page in document order", async () => {
+test("PDF parsing is deferred until processing so runtime import failures are contained", async () => {
+  assert.doesNotMatch(processorSource, /^import\s+\{\s*getDocument\s*\}\s+from\s+["']pdfjs-dist\/legacy\/build\/pdf\.mjs["']/m);
+  assert.match(processorSource, /await import\(["']pdfjs-dist\/legacy\/build\/pdf\.mjs["']\)/);
   const extracted = await extractPdfText(makePdf(["Chapter One", "Chapter Two"]));
   assert.match(extracted, /Chapter One/);
   assert.match(extracted, /Chapter Two/);
@@ -179,13 +182,43 @@ test("the lecturer UI exposes extraction, processing, polling, and ready states"
   assert.match(clientSource, /course-material-extraction-complete/);
 });
 
-test("the HTTP endpoint rejects unauthenticated processing requests", async () => {
-  const response = await processCourseSourceEndpoint.fetch(new Request("https://studia.test/api/process-course-source", {
+test("the HTTP endpoint rejects unauthenticated requests and contains client setup failures", async () => {
+  const unauthenticated = await processCourseSourceEndpoint.fetch(new Request("https://studia.test/api/process-course-source", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ sourceId }),
   }));
-  assert.equal(response.status, 401);
+  assert.equal(unauthenticated.status, 401);
+
+  const originalEnv = {
+    url: process.env.VITE_SUPABASE_URL,
+    anonKey: process.env.VITE_SUPABASE_ANON_KEY,
+    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  };
+  const originalLogger = console.error;
+  process.env.VITE_SUPABASE_URL = "not a valid URL";
+  process.env.VITE_SUPABASE_ANON_KEY = "public-test-key";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "service-test-key";
+  console.error = () => {};
+  try {
+    const setupFailure = await processCourseSourceEndpoint.fetch(new Request("https://studia.test/api/process-course-source", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer test-token" },
+      body: JSON.stringify({ sourceId }),
+    }));
+    assert.equal(setupFailure.status, 500);
+    assert.deepEqual(await setupFailure.json(), {
+      error: "Course source processing could not be completed. Try again later.",
+    });
+  } finally {
+    if (originalEnv.url === undefined) delete process.env.VITE_SUPABASE_URL;
+    else process.env.VITE_SUPABASE_URL = originalEnv.url;
+    if (originalEnv.anonKey === undefined) delete process.env.VITE_SUPABASE_ANON_KEY;
+    else process.env.VITE_SUPABASE_ANON_KEY = originalEnv.anonKey;
+    if (originalEnv.serviceRoleKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = originalEnv.serviceRoleKey;
+    console.error = originalLogger;
+  }
 });
 test("storage, malformed PDFs, empty text, and persistence errors become failed states", async (t) => {
   await t.test("private storage download failure", async () => {
@@ -197,7 +230,7 @@ test("storage, malformed PDFs, empty text, and persistence errors become failed 
 
   await t.test("malformed PDF data", async () => {
     const { state, dependencies } = processorState({ pdf: new TextEncoder().encode("%PDF-1.4\ninvalid document") });
-    await assert.rejects(processCourseSource(sourceId, dependencies), /Unable to read this PDF/);
+    await assert.rejects(processCourseSource(sourceId, dependencies), /Unable to initialize or read this PDF/);
     assert.equal(state.status, "failed");
   });
 
