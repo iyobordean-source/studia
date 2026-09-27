@@ -996,6 +996,16 @@
   gap: 7px;
 }
 
+.course-material-extraction-complete {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  padding: 0 6px;
+  color: var(--moss);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .course-material-delete {
   color: #783e35;
   background: var(--warm-white);

@@ -170,10 +170,13 @@ test("extraction text is private to existing course participants and client writ
   assert.doesNotMatch(sourceMigration, /create or replace function public\.complete_course_material_extraction/);
 });
 
-test("the lecturer UI offers processing only for pending or failed sources", () => {
-  assert.match(clientSource, /canManage && \(sourcesByMaterial\[material\.id\]\?\.status === "pending" \|\| sourcesByMaterial\[material\.id\]\?\.status === "failed"\)/);
+test("the lecturer UI exposes extraction, processing, polling, and ready states", () => {
+  assert.match(clientSource, /status === "pending"[\s\S]*?status === "processing"[\s\S]*?status === "failed"/);
   assert.match(clientSource, /processMaterial\(material, sourcesByMaterial\[material\.id\]\)/);
   assert.match(clientSource, /fetch\("\/api\/process-course-source"/);
+  assert.match(clientSource, /refreshCourseBrainStatuses\(materials\.map/);
+  assert.match(clientSource, /window\.setTimeout\(\(\) => void poll\(\), 1500\)/);
+  assert.match(clientSource, /course-material-extraction-complete/);
 });
 
 test("the HTTP endpoint rejects unauthenticated processing requests", async () => {

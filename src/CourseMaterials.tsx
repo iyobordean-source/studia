@@ -163,9 +163,61 @@ export function CourseMaterialsSection({
     }
   }, [canManage, courseId]);
 
+  const refreshCourseBrainStatuses = useCallback(async (materialIds: string[]) => {
+    const client = supabase;
+    if (!canManage || materialIds.length === 0) {
+      setSourcesByMaterial({});
+      setSourceLoadError(false);
+      return;
+    }
+    if (!client) {
+      setSourceLoadError(true);
+      return;
+    }
+
+    try {
+      const { data: sourceRows, error } = await client
+        .from("course_material_sources")
+        .select("id, course_material_id, status, error_message, updated_at")
+        .in("course_material_id", materialIds);
+      if (error) {
+        setSourceLoadError(true);
+        return;
+      }
+
+      const nextSources: Record<string, CourseBrainSource> = {};
+      (sourceRows ?? []).forEach((row) => {
+        const source = row as unknown as CourseBrainSource;
+        nextSources[source.course_material_id] = source;
+      });
+      setSourcesByMaterial(nextSources);
+      setSourceLoadError(false);
+    } catch {
+      setSourceLoadError(true);
+    }
+  }, [canManage]);
+
   useEffect(() => {
     void loadMaterials();
   }, [loadMaterials]);
+
+  const hasProcessingSource = Object.values(sourcesByMaterial).some((source) => source.status === "processing");
+  useEffect(() => {
+    if (!canManage || !hasProcessingSource) return;
+
+    let cancelled = false;
+    let timer = 0;
+    const poll = async () => {
+      await refreshCourseBrainStatuses(materials.map((material) => material.id));
+      if (!cancelled) timer = window.setTimeout(() => void poll(), 1500);
+    };
+    timer = window.setTimeout(() => void poll(), 1500);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [canManage, hasProcessingSource, materials, refreshCourseBrainStatuses]);
 
   async function uploadMaterial(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -371,7 +423,7 @@ export function CourseMaterialsSection({
     } catch (error) {
       setSaveError(messageFor(error, "Unable to process this course PDF."));
     } finally {
-      await loadMaterials();
+      await refreshCourseBrainStatuses(materials.map((item) => item.id));
       setBusyMaterialId("");
       setBusyMaterialAction(null);
     }
@@ -496,21 +548,26 @@ export function CourseMaterialsSection({
                     : <Download aria-hidden="true" size={15} />}
                   {busyMaterialId === material.id && busyMaterialAction === "download" ? "Preparing..." : "Download PDF"}
                 </button>
-                {canManage && (sourcesByMaterial[material.id]?.status === "pending" || sourcesByMaterial[material.id]?.status === "failed") && (
+                {canManage && (sourcesByMaterial[material.id]?.status === "pending" || sourcesByMaterial[material.id]?.status === "processing" || sourcesByMaterial[material.id]?.status === "failed") && (
                   <button
                     className="button identity-secondary course-material-action"
                     type="button"
                     onClick={() => void processMaterial(material, sourcesByMaterial[material.id])}
-                    disabled={Boolean(busyMaterialId)}
-                    aria-label={(sourcesByMaterial[material.id]?.status === "failed" ? "Retry text extraction for " : "Extract text from ") + material.title}
+                    disabled={Boolean(busyMaterialId) || sourceLoadError || sourcesByMaterial[material.id]?.status === "processing"}
+                    aria-label={(sourcesByMaterial[material.id]?.status === "processing" ? "Text extraction processing for " : sourcesByMaterial[material.id]?.status === "failed" ? "Retry text extraction for " : "Extract text from ") + material.title}
                   >
-                    {busyMaterialId === material.id && busyMaterialAction === "process"
+                    {(busyMaterialId === material.id && busyMaterialAction === "process" || sourcesByMaterial[material.id]?.status === "processing")
                       ? <LoaderCircle aria-hidden="true" size={15} className="auth-spinner" />
                       : null}
                     {busyMaterialId === material.id && busyMaterialAction === "process"
                       ? "Extracting text..."
-                      : sourcesByMaterial[material.id]?.status === "failed" ? "Retry extraction" : "Extract PDF text"}
+                      : sourcesByMaterial[material.id]?.status === "processing"
+                        ? "Processing..."
+                        : sourcesByMaterial[material.id]?.status === "failed" ? "Retry extraction" : "Extract PDF text"}
                   </button>
+                )}
+                {canManage && sourcesByMaterial[material.id]?.status === "ready" && (
+                  <span className="course-material-extraction-complete" role="status">Text extracted</span>
                 )}
                 {canManage && (
                   <button
