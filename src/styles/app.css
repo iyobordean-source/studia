@@ -1050,3 +1050,59 @@
     transition: none;
   }
 }
+
+.course-material-brain-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.course-material-brain-state {
+  display: inline-flex;
+  min-height: 23px;
+  align-items: center;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: #4f554d;
+  background: var(--warm-white);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.course-material-brain-state--pending {
+  border-color: #d7c99e;
+  color: #5f4b1b;
+  background: #f5f0df;
+}
+
+.course-material-brain-state--processing {
+  border-color: #b8c9b8;
+  color: #31513a;
+  background: #edf2eb;
+}
+
+.course-material-brain-state--ready {
+  border-color: #9fb8a3;
+  color: #25452e;
+  background: #e7efe5;
+}
+
+.course-material-brain-state--failed {
+  border-color: #d2aaa1;
+  color: #713d34;
+  background: #f6ece9;
+}
+
+.course-material-processing-error {
+  margin: 5px 0 0;
+  color: #713d34;
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}

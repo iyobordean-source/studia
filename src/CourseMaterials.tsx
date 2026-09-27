@@ -19,6 +19,21 @@ type CourseMaterial = {
   updated_at: string;
 };
 
+type CourseBrainSource = {
+  id: string;
+  course_material_id: string;
+  status: string;
+  error_message: string | null;
+  updated_at: string;
+};
+
+const courseBrainStatusLabels: Record<string, string> = {
+  pending: "Pending",
+  processing: "Processing",
+  ready: "Ready",
+  failed: "Failed",
+};
+
 function messageFor(error: unknown, fallback: string) {
   return error instanceof Error && error.message.trim() ? error.message : fallback;
 }
@@ -48,6 +63,37 @@ async function validatePdf(file: File): Promise<string | null> {
   return null;
 }
 
+function CourseBrainProcessingStatus({
+  source,
+  unavailable,
+}: {
+  source: CourseBrainSource | undefined;
+  unavailable: boolean;
+}) {
+  const statusLabel = unavailable
+    ? "Status unavailable"
+    : source
+      ? courseBrainStatusLabels[source.status] ?? "Unknown status"
+      : "Not initialized";
+  const statusTone = !source || unavailable || !courseBrainStatusLabels[source.status]
+    ? "unavailable"
+    : source.status;
+
+  return (
+    <>
+      <p className="course-material-brain-status">
+        <span>Course Brain</span>
+        <span className={`course-material-brain-state course-material-brain-state--${statusTone}`}>
+          {statusLabel}
+        </span>
+      </p>
+      {source?.status === "failed" && source.error_message && (
+        <p className="course-material-processing-error">{source.error_message}</p>
+      )}
+    </>
+  );
+}
+
 export function CourseMaterialsSection({
   courseId,
   canManage,
@@ -56,6 +102,8 @@ export function CourseMaterialsSection({
   canManage: boolean;
 }) {
   const [materials, setMaterials] = useState<CourseMaterial[]>([]);
+  const [sourcesByMaterial, setSourcesByMaterial] = useState<Record<string, CourseBrainSource>>({});
+  const [sourceLoadError, setSourceLoadError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [title, setTitle] = useState("");
@@ -79,6 +127,8 @@ export function CourseMaterialsSection({
 
     setLoading(true);
     setLoadError("");
+    setSourceLoadError(false);
+    setSourcesByMaterial({});
     try {
       const { data, error } = await client
         .from("course_materials")
@@ -86,14 +136,32 @@ export function CourseMaterialsSection({
         .eq("course_id", courseId)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      setMaterials((data ?? []) as unknown as CourseMaterial[]);
+      const loadedMaterials = (data ?? []) as unknown as CourseMaterial[];
+      setMaterials(loadedMaterials);
+      if (canManage && loadedMaterials.length > 0) {
+        const { data: sourceRows, error: sourceError } = await client
+          .from("course_material_sources")
+          .select("id, course_material_id, status, error_message, updated_at")
+          .in("course_material_id", loadedMaterials.map((material) => material.id));
+        if (sourceError) {
+          setSourceLoadError(true);
+          return;
+        }
+        const nextSources: Record<string, CourseBrainSource> = {};
+        (sourceRows ?? []).forEach((row) => {
+          const source = row as unknown as CourseBrainSource;
+          nextSources[source.course_material_id] = source;
+        });
+        setSourcesByMaterial(nextSources);
+      }
     } catch (error) {
       setLoadError(messageFor(error, "Unable to load course materials."));
       setMaterials([]);
+      setSourcesByMaterial({});
     } finally {
       setLoading(false);
     }
-  }, [courseId]);
+  }, [canManage, courseId]);
 
   useEffect(() => {
     void loadMaterials();
@@ -214,6 +282,11 @@ export function CourseMaterialsSection({
       if (!data) throw new Error("This material could not be removed from the course.");
 
       setMaterials((current) => current.filter((item) => item.id !== material.id));
+      setSourcesByMaterial((current) =>
+        Object.fromEntries(
+          Object.entries(current).filter(([materialId]) => materialId !== material.id),
+        ),
+      );
       setNotice(material.title + " was deleted.");
     } catch (error) {
       setSaveError(messageFor(error, "Unable to delete this material."));
@@ -355,6 +428,12 @@ export function CourseMaterialsSection({
                   <span>{formatSize(material.file_size)}</span>
                 </p>
                 <p className="course-material-filename">{material.file_name}</p>
+                {canManage && (
+                  <CourseBrainProcessingStatus
+                    source={sourcesByMaterial[material.id]}
+                    unavailable={sourceLoadError}
+                  />
+                )}
               </div>
               <div className="course-material-actions">
                 <button

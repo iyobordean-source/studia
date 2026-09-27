@@ -149,3 +149,43 @@ test("course material downloads use the authenticated Storage API", () => {
   assert.match(materialClient, /\.from\(bucketName\)\s*\.download\(material\.storage_path\)/);
   assert.doesNotMatch(materialClient, /getPublicUrl|createSignedUrl/);
 });
+
+const sourceMigration = readFileSync(new URL("../supabase/migrations/20260926160000_course_brain_source_processing.sql", import.meta.url), "utf8");
+const courseMaterialsClient = readFileSync(new URL("../src/CourseMaterials.tsx", import.meta.url), "utf8");
+
+test("Course Brain source records are linked to materials and model processing errors and timestamps", () => {
+  assert.match(sourceMigration, /create type public\.studia_course_source_status as enum \('pending', 'processing', 'ready', 'failed'\)/);
+  assert.match(sourceMigration, /course_material_id uuid not null unique\s*references public\.course_materials \(id\) on delete cascade/);
+  assert.match(sourceMigration, /status public\.studia_course_source_status not null default 'pending'/);
+  assert.match(sourceMigration, /error_message text/);
+  assert.match(sourceMigration, /created_at timestamptz not null[\s\S]*?updated_at timestamptz not null/);
+  assert.match(sourceMigration, /status = 'failed'::public\.studia_course_source_status[\s\S]*?char_length\(error_message\) between 1 and 2000/);
+});
+
+test("Course Brain source RLS limits reads and initial records to the owning lecturer", () => {
+  assert.match(sourceMigration, /alter table public\.course_material_sources enable row level security;\s*alter table public\.course_material_sources force row level security;/);
+  assert.match(sourceMigration, /create policy course_material_sources_read_owner[\s\S]*?public\.owns_course\(cm\.course_id\)/);
+  assert.match(sourceMigration, /create policy course_material_sources_insert_pending_by_owner[\s\S]*?status = 'pending'[\s\S]*?public\.owns_course\(cm\.course_id\)/);
+  assert.match(sourceMigration, /revoke all on public\.course_material_sources from public, anon, authenticated, service_role;/);
+  assert.match(sourceMigration, /grant select on public\.course_material_sources to authenticated, service_role;/);
+  assert.match(sourceMigration, /grant insert \(course_material_id\) on public\.course_material_sources to authenticated;/);
+  assert.doesNotMatch(sourceMigration, /has_active_role\('student'/);
+  assert.doesNotMatch(sourceMigration, /create policy [^;]*for (update|delete)/i);
+  assert.match(sourceMigration, /grant update \(status, error_message\) on public\.course_material_sources to service_role;/);
+  assert.doesNotMatch(sourceMigration, /grant\s+(insert|delete|all)[^;]*to service_role/i);
+  assert.doesNotMatch(sourceMigration, /grant\s+(update|delete|all)[^;]*to authenticated/i);
+});
+
+test("existing and newly uploaded materials start with a pending source record", () => {
+  assert.match(sourceMigration, /create trigger course_materials_create_source\s+after insert on public\.course_materials/);
+  assert.match(sourceMigration, /insert into public\.course_material_sources \(course_material_id\)[\s\S]*?values \(new\.id\)[\s\S]*?on conflict \(course_material_id\) do nothing/);
+  assert.match(sourceMigration, /insert into public\.course_material_sources \(course_material_id\)\s*select cm\.id\s*from public\.course_materials cm\s*on conflict \(course_material_id\) do nothing/);
+});
+
+test("lecturer material rows distinguish source states, missing records, and lookup failures", () => {
+  assert.match(courseMaterialsClient, /pending: "Pending"[\s\S]*?processing: "Processing"[\s\S]*?ready: "Ready"[\s\S]*?failed: "Failed"/);
+  assert.match(courseMaterialsClient, /canManage && loadedMaterials\.length > 0/);
+  assert.match(courseMaterialsClient, /"Status unavailable"/);
+  assert.match(courseMaterialsClient, /"Not initialized"/);
+  assert.match(courseMaterialsClient, /source\?\.status === "failed" && source\.error_message/);
+});

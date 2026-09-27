@@ -4,7 +4,7 @@
 
 The intended client application uses React, Vite, TypeScript, and Tailwind CSS. Supabase is the planned platform for PostgreSQL data, authentication, and file storage. Gemini is a later AI provider for grounded assessment assistance. Vercel is the intended deployment target. Git and GitHub provide version control and collaboration.
 
-Supabase Auth is connected through the official JavaScript client. The identity, Course Foundation, and Course Enrollment Workflow migrations are applied and verified in the configured production Supabase project. Course Materials Foundation is defined in supabase/migrations/20260926140000_course_materials_foundation.sql; it creates private Storage configuration and policies but remains to be applied. AI provider integration and deployment remain future work.
+Supabase Auth is connected through the official JavaScript client. The identity, Course Foundation, Course Enrollment Workflow, and Course Materials Foundation migrations are applied and manually verified in the configured production Supabase project. The Course Brain source-processing foundation is defined in `supabase/migrations/20260926160000_course_brain_source_processing.sql`; it remains to be applied and verified. No PDF parsing, indexing, retrieval, or AI processing is implemented.
 
 ## Major application areas
 
@@ -21,7 +21,7 @@ These are product areas, not a prescribed folder structure. Keep implementation 
 
 Lecturers add course materials, which are stored with access controlled by the course. The application will use those materials to build course-specific context for assessment generation. A lecturer reviews and edits proposed questions before publishing an assessment. Students complete published assessments. Results feed course-level performance analysis and targeted practice.
 
-The identity, course, enrollment, and course-material schemas are defined in their respective migrations. Assessment and processing schemas remain open until their own vertical slices are designed.
+The identity, course, enrollment, course-material, and initial course-material source-state schemas are defined in their respective migrations. Assessment and document-processing schemas remain open until their own vertical slices are designed.
 
 ## Authentication, profiles, roles, and route authorization
 
@@ -74,17 +74,25 @@ The browser routes reuse the existing identity gates. Existing course list/detai
 
 ## Course materials and Storage
 
-The Course Materials Foundation migration adds public.course_materials with a course foreign key, title, optional description, file name, MIME type, size, timestamps, and a deterministic storage_path in the form course_id/material_id/file_name. V1 uploads are PDF only, limited to 20 MB. The migration creates a private course-materials bucket restricted to application/pdf and 20 MB.
+The Course Materials Foundation migration adds public.course_materials with a course foreign key, title, optional description, file name, MIME type, size, timestamps, and a deterministic storage_path in the form course_id/material_id/file_name. V1 uploads are PDF only, limited to 20 MB. The migration creates a private course-materials bucket restricted to application/pdf and 20 MB. This migration is applied and manually verified in the configured production project.
 
 Forced table RLS lets the owning active, approved Lecturer read/create/update/delete their course material metadata. An active Student can read metadata only when a course_memberships row enrolls them in that course. Students and unauthenticated users cannot write material records.
 
-Storage object policies use the same course ownership and enrollment checks. Upload and delete paths must begin with the owned course UUID and contain a material UUID and PDF filename. Reads additionally require a matching visible course_materials row, so guessing another course path does not grant access. Files are uploaded, downloaded, and removed through the authenticated Supabase Storage API; the client does not write Storage tables. The material record is created after upload, and failed record creation triggers a best-effort object cleanup. Deletion removes the object before its metadata row. The migration has not been applied to the hosted project, so live Storage policy behavior remains to be verified.
+Storage object policies use the same course ownership and enrollment checks. Upload and delete paths must begin with the owned course UUID and contain a material UUID and PDF filename. Reads additionally require a matching visible course_materials row, so guessing another course path does not grant access. Files are uploaded, downloaded, and removed through the authenticated Supabase Storage API; the client does not write Storage tables. The material record is created after upload, and failed record creation triggers a best-effort object cleanup. Deletion removes the object before its metadata row. The Storage policies have been applied and manually verified in the configured production project.
+
+## Course Brain source-processing foundation
+
+The initial source-state migration defines one `course_material_sources` row per `course_materials` record. Each source has a stable ID, a `pending` / `processing` / `ready` / `failed` state, optional bounded error text, and created/updated timestamps. Existing materials are backfilled as pending; new material inserts seed a pending row. Deleting a material cascades to its source record, so a later re-upload receives a new source identity for traceability.
+
+Forced RLS lets an active, approved Lecturer read source state only for materials in courses they own. The material trigger can insert only the initial pending state. Authenticated clients have no source-state update or delete grants. The trusted `service_role` can update only status and error fields for future processing transitions and reprocessing. Students receive no source-state access through this table, so their existing course/material permissions are unchanged. The lecturer materials view reports a missing record as Not initialized and a failed status lookup as unavailable.
+
+This migration is local and has not been applied or verified in the hosted project. It represents processing state only: PDF extraction, chunking, indexing, retrieval, Course Brain content, and AI generation are not implemented.
 
 ## AI and data boundaries
 
 RAG/source grounding is a V1 product capability, not a later optional phase. The V1 path is lecturer-provided course material → authorized source processing/indexing → course-scoped retrieval of relevant passages → grounded assessment draft with source traceability → lecturer review/editing → publication. Retrieval must be constrained to material the acting lecturer or student is authorized to access. Generated questions remain drafts until a lecturer publishes them.
 
-The precise parsing, chunking, embedding, index, and provider choices remain implementation decisions to make before the Course Brain slice. Gemini is a planned provider, not a currently connected service. Keep provider secrets on a trusted server-side boundary. Minimise student/course data sent to providers, and define retention, deletion/re-indexing, and privacy behavior. AI output must never make authorization decisions.
+PDF parsing, chunking, embeddings, index design, source passage traceability, and provider choices remain future implementation decisions after the source-state foundation. Gemini is a planned provider, not a currently connected service. Keep provider secrets on a trusted server-side boundary. Minimise student/course data sent to providers, and define retention, deletion/re-indexing, and privacy behavior. AI output must never make authorization decisions.
 
 No separate backend framework is planned by default. When AI calls are introduced, choose and document the smallest trusted server-side option that fits the deployment and security needs, such as a managed function.
 

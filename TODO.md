@@ -24,7 +24,7 @@ This roadmap is phased. Future work remains open until it is implemented and che
 - [x] Add the Admin lecturer-application queue with approve/reject actions through the existing review RPC.
 - [x] Build the authenticated role-aware application shell and Student dashboard with honest empty states.
 
-The identity/authorization foundation is verified in the configured Supabase project. The authenticated shell and Student dashboard are implemented with honest empty assessment, result, and practice states. The Course Foundation migration is applied and verified in the configured Supabase project. The Course Enrollment Workflow migration and UI are applied and manually verified in production. Course Materials Foundation is implemented locally; its migration still needs to be applied and verified. Email confirmation settings remain to be checked.
+The identity/authorization foundation is verified in the configured Supabase project. The authenticated shell and Student dashboard are implemented with honest empty assessment, result, and practice states. The Course Foundation migration is applied and verified in the configured Supabase project. The Course Enrollment Workflow migration and UI are applied and manually verified in production. Course Materials Foundation is applied and manually verified in production. The new Course Brain source-state foundation is implemented locally; its migration remains to be applied and verified. Email confirmation settings remain to be checked.
 ## Phase 2 â€” Course management and course materials
 
 - [x] Define the initial course and membership workflow; student join requests require lecturer approval.
@@ -33,11 +33,14 @@ The identity/authorization foundation is verified in the configured Supabase pro
 - [x] Build lecturer course create/list/detail and student enrolled-course list/detail flows.
 - [x] Build lecturer roster management and student course discovery/join requests with atomic lecturer approval/rejection RPCs; migration applied and manually verified.
 - [x] Apply and verify the course enrollment workflow migration in the configured Supabase project.
-- [x] Implement course PDF metadata, private bucket policies, and participant access in a local migration; live application remains pending.
-- [x] Add lecturer PDF upload/list/delete and student material listing/download UI; hosted migration verification remains pending.
-- [ ] Apply and verify the Course Materials Foundation migration and Storage policies in the configured Supabase project.
+- [x] Implement course PDF metadata, private bucket policies, and participant access; migration applied and manually verified in production.
+- [x] Add lecturer PDF upload/list/delete and student material listing/download UI; workflow manually verified in production.
+- [x] Apply and manually verify the Course Materials Foundation migration and Storage policies in the configured Supabase project.
 
 ## Phase 3 â€” Course Brain
+
+- [x] Add the minimal per-material source record and lecturer processing-state indication; new migration remains pending hosted application.
+- [ ] Apply and verify the Course Brain source-processing migration in the configured Supabase project.
 
 - [ ] Define the V1 RAG/Course Brain pipeline: source processing, course-scoped retrieval, traceability, and update/deletion behavior.
 - [ ] Design source processing and traceability for generated context.
