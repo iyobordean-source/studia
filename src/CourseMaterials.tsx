@@ -111,7 +111,7 @@ export function CourseMaterialsSection({
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [busyMaterialId, setBusyMaterialId] = useState("");
-  const [busyMaterialAction, setBusyMaterialAction] = useState<"download" | "delete" | null>(null);
+  const [busyMaterialAction, setBusyMaterialAction] = useState<"download" | "delete" | "process" | null>(null);
   const [saveError, setSaveError] = useState("");
   const [notice, setNotice] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
@@ -329,6 +329,54 @@ export function CourseMaterialsSection({
     }
   }
 
+  async function processMaterial(material: CourseMaterial, source: CourseBrainSource | undefined) {
+    if (!source) {
+      setSaveError("Course Brain source processing is not initialized for this material.");
+      return;
+    }
+    const client = supabase;
+    if (!client) {
+      setSaveError(supabaseConfigurationError);
+      return;
+    }
+
+    setBusyMaterialId(material.id);
+    setBusyMaterialAction("process");
+    setSaveError("");
+    setNotice("");
+    try {
+      const { data, error } = await client.auth.getSession();
+      if (error) throw error;
+      const accessToken = data.session?.access_token;
+      if (!accessToken) throw new Error("Your session has expired. Sign in again and retry.");
+
+      setSourcesByMaterial((current) => ({
+        ...current,
+        [material.id]: { ...source, status: "processing", error_message: null },
+      }));
+      const response = await fetch("/api/process-course-source", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ sourceId: source.id }),
+      });
+      if (!(response.headers.get("content-type") ?? "").includes("application/json")) {
+        throw new Error("The course text processor is unavailable in this development server. Use the Vercel development runtime.");
+      }
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "Unable to extract text from this PDF.");
+      setNotice(material.title + " text was extracted and saved for future Course Brain retrieval.");
+    } catch (error) {
+      setSaveError(messageFor(error, "Unable to process this course PDF."));
+    } finally {
+      await loadMaterials();
+      setBusyMaterialId("");
+      setBusyMaterialAction(null);
+    }
+  }
+
   return (
     <section className="course-detail-section course-materials-section" aria-labelledby="course-materials-title">
       <p className="auth-kicker">COURSE MATERIALS</p>
@@ -448,6 +496,22 @@ export function CourseMaterialsSection({
                     : <Download aria-hidden="true" size={15} />}
                   {busyMaterialId === material.id && busyMaterialAction === "download" ? "Preparing..." : "Download PDF"}
                 </button>
+                {canManage && (sourcesByMaterial[material.id]?.status === "pending" || sourcesByMaterial[material.id]?.status === "failed") && (
+                  <button
+                    className="button identity-secondary course-material-action"
+                    type="button"
+                    onClick={() => void processMaterial(material, sourcesByMaterial[material.id])}
+                    disabled={Boolean(busyMaterialId)}
+                    aria-label={(sourcesByMaterial[material.id]?.status === "failed" ? "Retry text extraction for " : "Extract text from ") + material.title}
+                  >
+                    {busyMaterialId === material.id && busyMaterialAction === "process"
+                      ? <LoaderCircle aria-hidden="true" size={15} className="auth-spinner" />
+                      : null}
+                    {busyMaterialId === material.id && busyMaterialAction === "process"
+                      ? "Extracting text..."
+                      : sourcesByMaterial[material.id]?.status === "failed" ? "Retry extraction" : "Extract PDF text"}
+                  </button>
+                )}
                 {canManage && (
                   <button
                     className="button course-material-delete course-material-action"

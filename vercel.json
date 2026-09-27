@@ -1,8 +1,11 @@
 {
   "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
+    { "source": "/", "destination": "/index.html" },
+    { "source": "/:path((?!api/).*)", "destination": "/index.html" }
+  ],
+  "functions": {
+    "api/process-course-source.ts": {
+      "maxDuration": 60
     }
-  ]
+  }
 }

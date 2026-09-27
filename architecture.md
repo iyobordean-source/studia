@@ -4,7 +4,7 @@
 
 The intended client application uses React, Vite, TypeScript, and Tailwind CSS. Supabase is the planned platform for PostgreSQL data, authentication, and file storage. Gemini is a later AI provider for grounded assessment assistance. Vercel is the intended deployment target. Git and GitHub provide version control and collaboration.
 
-Supabase Auth is connected through the official JavaScript client. The identity, Course Foundation, Course Enrollment Workflow, and Course Materials Foundation migrations are applied and manually verified in the configured production Supabase project. The Course Brain source-processing foundation is defined in `supabase/migrations/20260926160000_course_brain_source_processing.sql`; it remains to be applied and verified. No PDF parsing, indexing, retrieval, or AI processing is implemented.
+Supabase Auth is connected through the official JavaScript client. The identity, course, enrollment, course-material, and Course Brain source-status migrations are applied and manually verified in the configured production Supabase project. PDF text extraction is implemented locally in a Vercel Node function. Its new extraction migration is pending hosted application and verification; chunking, indexing, retrieval, and AI processing are not implemented.
 
 ## Major application areas
 
@@ -21,7 +21,7 @@ These are product areas, not a prescribed folder structure. Keep implementation 
 
 Lecturers add course materials, which are stored with access controlled by the course. The application will use those materials to build course-specific context for assessment generation. A lecturer reviews and edits proposed questions before publishing an assessment. Students complete published assessments. Results feed course-level performance analysis and targeted practice.
 
-The identity, course, enrollment, course-material, and initial course-material source-state schemas are defined in their respective migrations. Assessment and document-processing schemas remain open until their own vertical slices are designed.
+The identity, course, enrollment, course-material, source-state, and extracted-text schemas are defined in their migrations. Assessment schemas and later chunk/index structures remain open until their own vertical slices are designed.
 
 ## Authentication, profiles, roles, and route authorization
 
@@ -82,23 +82,25 @@ Storage object policies use the same course ownership and enrollment checks. Upl
 
 ## Course Brain source-processing foundation
 
-The initial source-state migration defines one `course_material_sources` row per `course_materials` record. Each source has a stable ID, a `pending` / `processing` / `ready` / `failed` state, optional bounded error text, and created/updated timestamps. Existing materials are backfilled as pending; new material inserts seed a pending row. Deleting a material cascades to its source record, so a later re-upload receives a new source identity for traceability.
+The source-state migration defines one `course_material_sources` row per `course_materials` record, with a stable ID, `pending` / `processing` / `ready` / `failed` status, bounded error text, and timestamps. Existing materials are backfilled as pending and new uploads receive a pending source row. This migration is applied and manually verified in the configured Supabase project. Forced RLS lets an active approved Lecturer read source state only for a course they own; authenticated clients cannot change processing status. Students receive no source-state access. The lecturer materials view reports missing or unavailable state honestly.
 
-Forced RLS lets an active, approved Lecturer read source state only for materials in courses they own. The material trigger can insert only the initial pending state. Authenticated clients have no source-state update or delete grants. The trusted `service_role` can update only status and error fields for future processing transitions and reprocessing. Students receive no source-state access through this table, so their existing course/material permissions are unchanged. The lecturer materials view reports a missing record as Not initialized and a failed status lookup as unavailable.
+The new `course_material_extractions` table stores one extracted text value per source, with a 5 MiB UTF-8 limit and created/updated timestamps. Deleting the source cascades to the text. Forced RLS allows reads only to the owning active Lecturer or an active Student enrolled in the same course, matching existing material access. Authenticated users have no write grants. A service-role-only `complete_course_material_extraction` function upserts the one extraction and changes `processing` to `ready` in the same transaction.
 
-This migration is local and has not been applied or verified in the hosted project. It represents processing state only: PDF extraction, chunking, indexing, retrieval, Course Brain content, and AI generation are not implemented.
+`api/process-course-source.ts` is a synchronous Vercel Node function. It validates the caller's Supabase session, then relies on existing source/material RLS to establish lecturer ownership and downloads the PDF through the authenticated private Storage API. The server-only `SUPABASE_SERVICE_ROLE_KEY` is used only for the guarded processing-state update and completion RPC; it must never be exposed through a `VITE_` variable. The lecturer starts work explicitly from a pending source row and can retry a failed row; page load does not process files. Processing handles all pages with PDF.js, fails clearly when the PDF is invalid or has no selectable text, and does not perform OCR. Inputs retain the existing 20 MiB PDF limit; extracted text is bounded to 5 MiB. A ready source with an extraction is idempotent, and retry uses the same one-to-one row.
+
+The extraction migration is local and has not been applied or verified in the hosted project. The Vercel endpoint also needs deployment and its server-only environment variable configured. Vite's standard development server does not run Vercel functions; use the Vercel development runtime for local endpoint checks. Chunking, indexing, retrieval, source passage traceability, Course Brain review, and AI generation are still future work.
 
 ## AI and data boundaries
 
 RAG/source grounding is a V1 product capability, not a later optional phase. The V1 path is lecturer-provided course material → authorized source processing/indexing → course-scoped retrieval of relevant passages → grounded assessment draft with source traceability → lecturer review/editing → publication. Retrieval must be constrained to material the acting lecturer or student is authorized to access. Generated questions remain drafts until a lecturer publishes them.
 
-PDF parsing, chunking, embeddings, index design, source passage traceability, and provider choices remain future implementation decisions after the source-state foundation. Gemini is a planned provider, not a currently connected service. Keep provider secrets on a trusted server-side boundary. Minimise student/course data sent to providers, and define retention, deletion/re-indexing, and privacy behavior. AI output must never make authorization decisions.
+PDF text parsing is implemented for selectable text in the current source-extraction slice. OCR, chunking, embeddings, index design, source passage traceability, and provider choices remain future implementation decisions after extraction is deployed and verified. Gemini is a planned provider, not a currently connected service. Keep provider secrets on a trusted server-side boundary. Minimise student/course data sent to providers, and define retention, deletion/re-indexing, and privacy behavior. AI output must never make authorization decisions.
 
 No separate backend framework is planned by default. When AI calls are introduced, choose and document the smallest trusted server-side option that fits the deployment and security needs, such as a managed function.
 
 ## Deployment
 
-Vercel is the intended deployment platform for the frontend. Environment variables must be separated by environment and contain only values appropriate for browser exposure; private credentials belong in trusted server-side configuration. Production deployment configuration is future work.
+Vercel is the intended deployment platform for the frontend and the synchronous source-processing function. Configure `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` for the client and `SUPABASE_SERVICE_ROLE_KEY` only in Vercel server-side environment settings. Never expose the service-role key to browser code. The extraction migration and production function configuration still require deployment and hosted verification.
 
 
 

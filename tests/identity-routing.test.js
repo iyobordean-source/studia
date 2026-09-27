@@ -155,7 +155,7 @@ const courseMaterialsClient = readFileSync(new URL("../src/CourseMaterials.tsx",
 
 test("Course Brain source records are linked to materials and model processing errors and timestamps", () => {
   assert.match(sourceMigration, /create type public\.studia_course_source_status as enum \('pending', 'processing', 'ready', 'failed'\)/);
-  assert.match(sourceMigration, /course_material_id uuid not null unique\s*references public\.course_materials \(id\) on delete cascade/);
+  assert.match(sourceMigration, /--\s*course_material_id uuid not null unique\s*--\s*references public\.course_materials \(id\) on delete cascade/);
   assert.match(sourceMigration, /status public\.studia_course_source_status not null default 'pending'/);
   assert.match(sourceMigration, /error_message text/);
   assert.match(sourceMigration, /created_at timestamptz not null[\s\S]*?updated_at timestamptz not null/);

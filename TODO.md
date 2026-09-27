@@ -24,7 +24,7 @@ This roadmap is phased. Future work remains open until it is implemented and che
 - [x] Add the Admin lecturer-application queue with approve/reject actions through the existing review RPC.
 - [x] Build the authenticated role-aware application shell and Student dashboard with honest empty states.
 
-The identity/authorization foundation is verified in the configured Supabase project. The authenticated shell and Student dashboard are implemented with honest empty assessment, result, and practice states. The Course Foundation migration is applied and verified in the configured Supabase project. The Course Enrollment Workflow migration and UI are applied and manually verified in production. Course Materials Foundation is applied and manually verified in production. The new Course Brain source-state foundation is implemented locally; its migration remains to be applied and verified. Email confirmation settings remain to be checked.
+The identity, course, enrollment, course-material, and Course Brain source-status foundations are applied and manually verified in the configured Supabase project. PDF text extraction is implemented locally behind a Vercel Node function; its new extraction migration and server configuration remain to be deployed and verified. Email confirmation settings remain to be checked.
 ## Phase 2 â€” Course management and course materials
 
 - [x] Define the initial course and membership workflow; student join requests require lecturer approval.
@@ -39,11 +39,12 @@ The identity/authorization foundation is verified in the configured Supabase pro
 
 ## Phase 3 â€” Course Brain
 
-- [x] Add the minimal per-material source record and lecturer processing-state indication; new migration remains pending hosted application.
-- [ ] Apply and verify the Course Brain source-processing migration in the configured Supabase project.
-
-- [ ] Define the V1 RAG/Course Brain pipeline: source processing, course-scoped retrieval, traceability, and update/deletion behavior.
-- [ ] Design source processing and traceability for generated context.
+- [x] Add the minimal per-material source record and lecturer processing-state indication; migration applied and manually verified.
+- [x] Add bounded per-source PDF text extraction, a private extraction row, atomic ready transition, and lecturer-triggered retry; local code/tests complete.
+- [ ] Apply and verify `20260927100000_course_material_extractions.sql`, deploy the Vercel function, and set its server-only Supabase key.
+- [ ] Process and verify an existing pending source such as CS101 through the lecturer action after deployment.
+- [ ] Define the V1 RAG/Course Brain pipeline: course-scoped retrieval, source traceability, and update/deletion behavior.
+- [ ] Design chunks and traceability for generated context.
 - [ ] Build lecturer review and update workflows for course knowledge.
 
 ## Phase 4 â€” Assessment Studio
