@@ -29,14 +29,58 @@ export class CourseSourceRequestError extends Error {
 
 class ProcessingFailure extends Error {}
 
-function isPdfHeader(bytes: Uint8Array) {
-  return new TextDecoder().decode(bytes.slice(0, 1024)).includes("%PDF-");
+function findPdfHeaderOffset(bytes: Uint8Array) {
+  return new TextDecoder().decode(bytes.slice(0, 1024)).indexOf("%PDF-");
 }
 
-export async function extractPdfText(pdfBytes: Uint8Array): Promise<string> {
+function isPdfHeader(bytes: Uint8Array) {
+  return findPdfHeaderOffset(bytes) >= 0;
+}
+
+function redactDiagnosticText(value: string, limit = 1000) {
+  return value
+    .replace(/\b(authorization|cookie|set-cookie)\s*[:=]\s*[^\r\n]+/gi, "$1: [redacted]")
+    .replace(/\bbearer\s+[^\s,;]+/gi, "Bearer [redacted]")
+    .replace(/\bsb_(?:publishable|secret)_[A-Za-z0-9_-]+\b/gi, "[redacted]")
+    .replace(/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, "[redacted]")
+    .slice(0, limit);
+}
+
+function getSafeErrorDetails(error: unknown) {
+  if (!(error instanceof Error)) {
+    return { name: typeof error, message: "A non-Error value was thrown." };
+  }
+
+  const details: Record<string, unknown> = {
+    name: redactDiagnosticText(error.name, 100),
+    message: redactDiagnosticText(error.message),
+  };
+  const errorFields = error as Error & { code?: unknown; status?: unknown; statusCode?: unknown };
+  for (const field of ["code", "status", "statusCode"] as const) {
+    const value = errorFields[field];
+    if (typeof value === "string" || typeof value === "number") {
+      details[field] = typeof value === "string" ? redactDiagnosticText(value, 100) : value;
+    }
+  }
+  if (error.cause instanceof Error) {
+    details.cause = {
+      name: redactDiagnosticText(error.cause.name, 100),
+      message: redactDiagnosticText(error.cause.message),
+    };
+  }
+  if (error.stack) {
+    details.stack = redactDiagnosticText(error.stack.split("\n").slice(0, 8).join("\n"), 2000);
+  }
+  return details;
+}
+
+export async function extractPdfText(
+  pdfBytes: Uint8Array,
+  loadPdfJs = () => import("pdfjs-dist/legacy/build/pdf.mjs"),
+): Promise<string> {
   let destroyLoadingTask: (() => Promise<void>) | undefined;
   try {
-    const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const { getDocument } = await loadPdfJs();
     const loadingTask = getDocument({
       data: new Uint8Array(pdfBytes),
       isEvalSupported: false,
@@ -67,6 +111,7 @@ export async function extractPdfText(pdfBytes: Uint8Array): Promise<string> {
     return pages.filter(Boolean).join("\n\n").trim();
   } catch (error) {
     if (error instanceof ProcessingFailure) throw error;
+    console.error("[process-course-source] PDF.js extraction failed", getSafeErrorDetails(error));
     throw new ProcessingFailure("Unable to initialize or read this PDF. Check that it is valid and is not password protected, then try again.");
   } finally {
     await destroyLoadingTask?.();
@@ -181,8 +226,23 @@ function createProcessorDependencies(
     },
     async downloadPdf(storagePath) {
       const { data, error } = await userClient.storage.from("course-materials").download(storagePath);
-      if (error) throw error;
-      return new Uint8Array(await data.arrayBuffer());
+      if (error) {
+        console.error("[process-course-source] Storage PDF download failed", getSafeErrorDetails(error));
+        throw error;
+      }
+      if (!data) throw new Error("Storage download returned no file data.");
+
+      const bytes = new Uint8Array(await data.arrayBuffer());
+      const firstBytesHex = Array.from(bytes.slice(0, 8), (byte) => byte.toString(16).padStart(2, "0")).join(" ");
+      console.info("[process-course-source] Storage PDF bytes inspected", {
+        downloadOutcome: "success",
+        byteLength: bytes.byteLength,
+        blobSize: data.size,
+        contentType: data.type || null,
+        firstBytesHex,
+        pdfHeaderOffset: findPdfHeaderOffset(bytes) >= 0 ? findPdfHeaderOffset(bytes) : null,
+      });
+      return bytes;
     },
     async completeSource(sourceId, extractedText) {
       const { error } = await serviceClient.rpc("complete_course_material_extraction", {
@@ -203,6 +263,26 @@ function createProcessorDependencies(
 
 function jsonResponse(status: number, body: Record<string, unknown>) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
+}
+
+function createStorageDiagnosticFetch(): typeof fetch {
+  return async (input, init) => {
+    const response = await fetch(input, init);
+    const requestUrl = input instanceof Request ? input.url : input instanceof URL ? input.href : input;
+    try {
+      if (new URL(requestUrl).pathname.includes("/storage/v1/object/")) {
+        console.info("[process-course-source] Storage HTTP response", {
+          status: response.status,
+          ok: response.ok,
+          contentType: response.headers.get("content-type"),
+          contentLength: response.headers.get("content-length"),
+        });
+      }
+    } catch {
+      // Do not log request URLs or headers if the request cannot be inspected.
+    }
+    return response;
+  };
 }
 
 export default {
@@ -235,7 +315,10 @@ export default {
     let stage = "authenticated Supabase client setup";
     try {
       const userClient = createClient(supabaseUrl, anonKey, {
-        global: { headers: { Authorization: `Bearer ${bearer}` } },
+        global: {
+          headers: { Authorization: `Bearer ${bearer}` },
+          fetch: createStorageDiagnosticFetch(),
+        },
         auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
       });
 

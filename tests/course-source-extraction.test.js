@@ -104,7 +104,7 @@ function processorState({ status = "pending", extractedText = null, authorized =
 
 test("PDF parsing is deferred until processing so runtime import failures are contained", async () => {
   assert.doesNotMatch(processorSource, /^import\s+\{\s*getDocument\s*\}\s+from\s+["']pdfjs-dist\/legacy\/build\/pdf\.mjs["']/m);
-  assert.match(processorSource, /await import\(["']pdfjs-dist\/legacy\/build\/pdf\.mjs["']\)/);
+  assert.ok(processorSource.includes('loadPdfJs = () => import("pdfjs-dist/legacy/build/pdf.mjs")'));
   assert.equal(
     vercelConfig.functions["api/process-course-source.ts"].includeFiles,
     "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
@@ -113,6 +113,39 @@ test("PDF parsing is deferred until processing so runtime import failures are co
   assert.match(extracted, /Chapter One/);
   assert.match(extracted, /Chapter Two/);
   assert.ok(extracted.indexOf("Chapter One") < extracted.indexOf("Chapter Two"));
+});
+
+test("PDF.js errors are logged for diagnostics while the extraction error stays generic", async () => {
+  const privatePdfText = "PRIVATE COURSE TEXT MUST NOT APPEAR IN LOGS";
+  const parserError = Object.assign(
+    new Error("Setting up fake worker failed: Cannot find module './pdf.worker.mjs'. Authorization: Bearer test-secret-token"),
+    { code: "ERR_MODULE_NOT_FOUND" },
+  );
+  const logged = [];
+  const originalConsoleError = console.error;
+  console.error = (...args) => logged.push(args);
+  try {
+    await assert.rejects(
+      extractPdfText(makePdf([privatePdfText]), async () => ({
+        getDocument: () => ({ promise: Promise.reject(parserError), destroy: async () => {} }),
+      })),
+      (error) => {
+        assert.equal(error.message, "Unable to initialize or read this PDF. Check that it is valid and is not password protected, then try again.");
+        return true;
+      },
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  assert.equal(logged.length, 1);
+  assert.equal(logged[0][0], "[process-course-source] PDF.js extraction failed");
+  const diagnostic = logged[0][1];
+  assert.equal(diagnostic.name, "Error");
+  assert.equal(diagnostic.message, "Setting up fake worker failed: Cannot find module './pdf.worker.mjs'. Authorization: [redacted]");
+  assert.doesNotMatch(JSON.stringify(diagnostic), /test-secret-token/);
+  assert.equal(diagnostic.code, "ERR_MODULE_NOT_FOUND");
+  assert.doesNotMatch(JSON.stringify(diagnostic), new RegExp(privatePdfText));
 });
 
 test("a pending source moves through processing to ready and persists one extraction", async () => {
@@ -233,10 +266,22 @@ test("storage, malformed PDFs, empty text, and persistence errors become failed 
     assert.equal(state.status, "failed");
   });
 
-  await t.test("malformed PDF data", async () => {
+  await t.test("malformed PDF data logs parser diagnostics and persists failed state", async () => {
     const { state, dependencies } = processorState({ pdf: new TextEncoder().encode("%PDF-1.4\ninvalid document") });
-    await assert.rejects(processCourseSource(sourceId, dependencies), /Unable to initialize or read this PDF/);
+    const logs = [];
+    const originalConsoleError = console.error;
+    console.error = (...args) => logs.push(args);
+    try {
+      await assert.rejects(processCourseSource(sourceId, dependencies), /Unable to initialize or read this PDF/);
+    } finally {
+      console.error = originalConsoleError;
+    }
     assert.equal(state.status, "failed");
+    const diagnostic = logs.find(([label]) => label === "[process-course-source] PDF.js extraction failed")?.[1];
+    assert.ok(diagnostic);
+    assert.equal(typeof diagnostic.name, "string");
+    assert.equal(typeof diagnostic.message, "string");
+    assert.notEqual(diagnostic.message, "Unable to initialize or read this PDF. Check that it is valid and is not password protected, then try again.");
   });
 
   await t.test("PDF without selectable text", async () => {

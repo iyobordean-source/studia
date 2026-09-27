@@ -4,7 +4,7 @@
 
 The intended client application uses React, Vite, TypeScript, and Tailwind CSS. Supabase is the planned platform for PostgreSQL data, authentication, and file storage. Gemini is a later AI provider for grounded assessment assistance. Vercel is the intended deployment target. Git and GitHub provide version control and collaboration.
 
-Supabase Auth is connected through the official JavaScript client. The identity, course, enrollment, course-material, and Course Brain source-status migrations are applied and manually verified in the configured production Supabase project. PDF text extraction is implemented locally in a Vercel Node function. Its new extraction migration is pending hosted application and verification; chunking, indexing, retrieval, and AI processing are not implemented.
+Supabase Auth is connected through the official JavaScript client. The identity, course, enrollment, course-material, source-status, and text-extraction migrations are deployed to the configured Supabase project, and the hosted processing setup is configured. The PDF.js worker-bundle fix has been deployed. Production PDF extraction still fails during PDF initialization or reading; the current diagnostic instrumentation is local and has not yet been deployed. Chunking, indexing, retrieval, and AI processing are not implemented.
 
 ## Major application areas
 
@@ -88,7 +88,9 @@ The new `course_material_extractions` table stores one extracted text value per 
 
 `api/process-course-source.ts` is a synchronous Vercel Node function. It validates the caller's Supabase session, then relies on existing source/material RLS to establish lecturer ownership and downloads the PDF through the authenticated private Storage API. The server-only `SUPABASE_SERVICE_ROLE_KEY` is used only for the guarded processing-state update and completion RPC; it must never be exposed through a `VITE_` variable. The lecturer starts work explicitly from a pending source row and can retry a failed row; page load does not process files. Processing handles all pages with PDF.js, fails clearly when the PDF is invalid or has no selectable text, and does not perform OCR. Inputs retain the existing 20 MiB PDF limit; extracted text is bounded to 5 MiB. A ready source with an extraction is idempotent, and retry uses the same one-to-one row.
 
-The extraction migration is local and has not been applied or verified in the hosted project. The Vercel endpoint also needs deployment and its server-only environment variable configured. Vite's standard development server does not run Vercel functions; use the Vercel development runtime for local endpoint checks. Chunking, indexing, retrieval, source passage traceability, Course Brain review, and AI generation are still future work.
+The local diagnostic instrumentation records the Storage HTTP status and response content type/length, then the downloaded Blob/byte lengths, the first eight bytes in hex, and the PDF-signature offset. PDF.js failures log a sanitized error name, message, code/status, cause, and short stack. Logs omit PDF text, request URLs and headers, and credentials. These diagnostics are not deployed yet; they are intended to distinguish a Storage byte/signature problem from a PDF.js parsing problem.
+
+The text-extraction migration and hosted server setup have been deployed. The PDF.js worker-bundle fix is also deployed, but production extraction still fails during PDF initialization or reading. The diagnostic instrumentation currently in the local API code has not yet been deployed. The next step is to deploy those existing diagnostics and perform one controlled CS101 extraction attempt before changing extraction behavior.
 
 ## AI and data boundaries
 
@@ -100,7 +102,7 @@ No separate backend framework is planned by default. When AI calls are introduce
 
 ## Deployment
 
-Vercel is the intended deployment platform for the frontend and the synchronous source-processing function. Configure `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` for the client and `SUPABASE_SERVICE_ROLE_KEY` only in Vercel server-side environment settings. Never expose the service-role key to browser code. The extraction migration and production function configuration still require deployment and hosted verification.
+Vercel hosts the frontend and synchronous source-processing function. The text-extraction migration, hosted processing setup, and PDF.js worker-bundle fix are deployed. Production extraction still fails; deploy the local diagnostics and make one controlled CS101 attempt before changing extraction behavior.
 
 
 

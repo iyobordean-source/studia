@@ -4,7 +4,7 @@ Studia is an AI-powered university assessment and course intelligence platform. 
 
 ## Current status
 
-**Identity, course, enrollment, course-material, and Course Brain source-status foundations are applied and manually verified in the configured Supabase project.** Student and approved lecturer access use persisted profile status. The authenticated shell, course management, enrollment requests, and lecturer review are working in production. Lecturer PDFs remain private to their course. PDF text extraction is implemented locally behind a Vercel Node function; the new extraction migration and function configuration still need deployment and hosted verification. Chunking, indexing/RAG, AI generation, assessments, results, and practice remain future work. A local Git repository is initialized on main; a GitHub remote has not been set up.
+**Identity, course, enrollment, course-material, and Course Brain source-status foundations are applied and manually verified in the configured Supabase project.** Student and approved lecturer access use persisted profile status. The authenticated shell, course management, enrollment requests, and lecturer review are working in production. Lecturer PDFs remain private to their course. The text-extraction migration and hosted processing setup are deployed, and the PDF.js worker-bundle fix is deployed. Production PDF extraction still fails; the current diagnostic instrumentation is local and has not yet been deployed. The next step is to deploy those diagnostics and run one controlled CS101 extraction to distinguish a Storage byte/signature issue from a PDF.js failure. Chunking, indexing/RAG, AI generation, assessments, results, and practice remain future work. A local Git repository is initialized on main; a GitHub remote has not been set up.
 ## Core product loop
 
 Course materials -> Course Brain and course-scoped RAG -> grounded assessment generation -> lecturer review and editing -> published assessment -> student assessment -> grading -> topic performance -> weak-area identification -> targeted practice -> reassessment.
@@ -15,14 +15,14 @@ Course materials -> Course Brain and course-scoped RAG -> grounded assessment ge
 - React Router
 - Tailwind CSS
 - Supabase JavaScript client and Auth
-- Supabase identity, course, enrollment, materials, and Course Brain source-status migrations are applied and manually verified; the new text-extraction migration is local and pending application
+- Supabase identity, course, enrollment, course-material, Course Brain source-status, and text-extraction migrations are deployed to the configured project; the hosted processing setup is configured
 - Gemini API, planned provider for V1 grounded AI; RAG/source grounding is a V1 capability, not yet implemented
 - PDF.js for server-side selectable PDF text extraction
 - Vercel Node functions for the trusted processor and frontend deployment
 - Git and GitHub
 - Lucide React for interface icons
 
-Only the libraries needed for the current scope are installed. Supabase Auth, identity, courses, enrollment, course materials, and source status are working in production. PDF text extraction is implemented locally; its database migration and Vercel server configuration remain pending. Chunking, retrieval, and AI are not connected.
+Only the libraries needed for the current scope are installed. Supabase Auth, identity, courses, enrollment, course materials, and source status are working in production. The PDF.js worker-bundle fix is deployed, but production PDF extraction still fails. Existing safe diagnostics in the local processor are not deployed yet; use them in one controlled CS101 attempt before changing extraction behavior. Chunking, retrieval, and AI are not connected.
 
 ## Documentation
 
@@ -36,7 +36,7 @@ Only the libraries needed for the current scope are installed. Supabase Auth, id
 
 Requirements: Node.js 20.19+ or 22.12+ and npm.
 
-Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the ignored `.env.local` file using your Supabase project URL and public anon/publishable key. These Vite variables are public. The Vercel function also needs `SUPABASE_SERVICE_ROLE_KEY` in server-only environment settings after the extraction migration is applied; never prefix it with `VITE_` or expose it to the browser. `.env.example` contains placeholders only. Vite `npm run dev` serves the frontend but not Vercel `/api` functions; use the Vercel development runtime to exercise the processor locally.
+Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the ignored `.env.local` file using your Supabase project URL and public anon/publishable key. These Vite variables are public. The Vercel function also needs `SUPABASE_SERVICE_ROLE_KEY` in server-only environment settings; this hosted processing setup is configured. Never prefix the key with `VITE_` or expose it to the browser. `.env.example` contains placeholders only. Vite `npm run dev` serves the frontend but not Vercel `/api` functions; use the Vercel development runtime to exercise the processor locally.
 
 ```sh
 npm install
@@ -45,7 +45,7 @@ npm run dev
 
 Vite prints a local URL after the development server starts.
 
-`npm run test` runs the existing identity/course contract checks and focused PDF-processing tests. They verify local state transitions and migration contracts, not hosted RPCs or live RLS. The configured project has identity, course, enrollment, materials, and Course Brain source-status migrations applied and manually verified. Apply `supabase/migrations/20260927100000_course_material_extractions.sql`, deploy the Vercel function, and configure its server-only key before using text extraction. A lecturer can then manually process or retry a pending source such as CS101; page loading never starts processing. The identity migration creates non-privileged onboarding profiles and restrictive identity RLS/function policies. Email confirmation and Google OAuth return to `/app`, which resolves the persisted profile and routes to onboarding or the role area. Add the local and production `/app` destinations to Supabase Auth URL Configuration.
+`npm run test` runs the existing identity/course contract checks and focused PDF-processing tests. They verify local state transitions and migration contracts, not hosted RPCs or live RLS. The configured project has identity, course, enrollment, materials, Course Brain source-status, and text-extraction migrations deployed. The hosted processing setup and PDF.js worker-bundle fix are deployed, but production extraction still fails. The current diagnostics are local; deploy those existing changes and perform one controlled CS101 attempt to determine whether the downloaded Storage bytes/signature or PDF.js causes the failure before changing extraction behavior. A lecturer can manually process or retry a pending source; page loading never starts processing. The identity migration creates non-privileged onboarding profiles and restrictive identity RLS/function policies. Email confirmation and Google OAuth return to `/app`, which resolves the persisted profile and routes to onboarding or the role area. Add the local and production `/app` destinations to Supabase Auth URL Configuration.
 
 For development Admin provisioning, create the intended Auth user through a trusted Supabase Dashboard action, then have a project owner run this in the SQL Editor with that user Auth UUID. Do not add public Admin signup or frontend promotion controls. The migration `review_lecturer_application` function checks active Admin status.
 
