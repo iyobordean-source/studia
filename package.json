@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.1",
+    "@thednp/dommatrix": "3.1.2",
     "lucide-react": "^1.48.0",
     "pdfjs-dist": "^5.4.394",
     "react": "^19.0.0",

@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import CSSMatrix from "@thednp/dommatrix";
 
 const maxPdfBytes = 20 * 1024 * 1024;
 const maxExtractedBytes = 5 * 1024 * 1024;
@@ -81,6 +82,10 @@ export async function extractPdfText(
 ): Promise<string> {
   let destroyLoadingTask: (() => Promise<void>) | undefined;
   try {
+    // pdfjs-dist 5.x initializes DOMMatrix at module load, even for text-only extraction.
+    if (!Reflect.get(globalThis, "DOMMatrix")) {
+      Reflect.set(globalThis, "DOMMatrix", CSSMatrix);
+    }
     const { getDocument } = await loadPdfJs();
     const loadingTask = getDocument({
       data: new Uint8Array(pdfBytes),
