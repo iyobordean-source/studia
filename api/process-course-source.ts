@@ -62,10 +62,11 @@ function getSafeErrorDetails(error: unknown) {
       details[field] = typeof value === "string" ? redactDiagnosticText(value, 100) : value;
     }
   }
-  if (error.cause instanceof Error) {
+  const cause = (error as Error & { cause?: unknown }).cause;
+  if (cause instanceof Error) {
     details.cause = {
-      name: redactDiagnosticText(error.cause.name, 100),
-      message: redactDiagnosticText(error.cause.message),
+      name: redactDiagnosticText(cause.name, 100),
+      message: redactDiagnosticText(cause.message),
     };
   }
   if (error.stack) {
