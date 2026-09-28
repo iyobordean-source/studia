@@ -4,7 +4,7 @@
 
 The intended client application uses React, Vite, TypeScript, and Tailwind CSS. Supabase is the planned platform for PostgreSQL data, authentication, and file storage. Gemini is a later AI provider for grounded assessment assistance. Vercel is the intended deployment target. Git and GitHub provide version control and collaboration.
 
-Supabase Auth is connected through the official JavaScript client. The identity, course, enrollment, course-material, source-status, and text-extraction migrations are deployed to the configured Supabase project, and the hosted processing setup is configured. The PDF.js worker-bundle fix has been deployed. Production PDF extraction still fails during PDF initialization or reading; the current diagnostic instrumentation is local and has not yet been deployed. Chunking, indexing, retrieval, and AI processing are not implemented.
+Supabase Auth is connected through the official JavaScript client. The identity, course, enrollment, course-material, source-status, and text-extraction migrations are deployed to the configured Supabase project, and the hosted processing setup is configured. The PDF.js worker-bundle and DOMMatrix runtime fixes are deployed, along with the diagnostics. Production PDF extraction is working; a controlled CS101_Introduction.pdf extraction reached the `ready` state. Chunking, indexing, retrieval, and AI processing are not implemented.
 
 ## Major application areas
 
@@ -86,11 +86,11 @@ The source-state migration defines one `course_material_sources` row per `course
 
 The new `course_material_extractions` table stores one extracted text value per source, with a 5 MiB UTF-8 limit and created/updated timestamps. Deleting the source cascades to the text. Forced RLS allows reads only to the owning active Lecturer or an active Student enrolled in the same course, matching existing material access. Authenticated users have no write grants. A service-role-only `complete_course_material_extraction` function upserts the one extraction and changes `processing` to `ready` in the same transaction.
 
-`api/process-course-source.ts` is a synchronous Vercel Node function. It validates the caller's Supabase session, then relies on existing source/material RLS to establish lecturer ownership and downloads the PDF through the authenticated private Storage API. The server-only `SUPABASE_SERVICE_ROLE_KEY` is used only for the guarded processing-state update and completion RPC; it must never be exposed through a `VITE_` variable. The lecturer starts work explicitly from a pending source row and can retry a failed row; page load does not process files. Processing handles all pages with PDF.js, fails clearly when the PDF is invalid or has no selectable text, and does not perform OCR. Inputs retain the existing 20 MiB PDF limit; extracted text is bounded to 5 MiB. A ready source with an extraction is idempotent, and retry uses the same one-to-one row.
+`api/process-course-source.ts` is a synchronous Vercel Node function. It validates the caller's Supabase session, then relies on existing source/material RLS to establish lecturer ownership and downloads the PDF through the authenticated private Storage API. The server-only `SUPABASE_SERVICE_ROLE_KEY` is used only for the guarded processing-state update and completion RPC; it must never be exposed through a `VITE_` variable. The lecturer starts work explicitly from a pending source row and can retry a failed row; page load does not process files. Processing handles all pages with PDF.js, fails clearly when the PDF is invalid or has no selectable text, and does not perform OCR. Before importing the installed PDF.js build, the Node processor provides a DOMMatrix shim when the runtime lacks one; this resolves the module-initialization requirement without invoking browser rendering APIs. Inputs retain the existing 20 MiB PDF limit; extracted text is bounded to 5 MiB. A ready source with an extraction is idempotent, and retry uses the same one-to-one row.
 
-The local diagnostic instrumentation records the Storage HTTP status and response content type/length, then the downloaded Blob/byte lengths, the first eight bytes in hex, and the PDF-signature offset. PDF.js failures log a sanitized error name, message, code/status, cause, and short stack. Logs omit PDF text, request URLs and headers, and credentials. These diagnostics are not deployed yet; they are intended to distinguish a Storage byte/signature problem from a PDF.js parsing problem.
+The deployed diagnostic instrumentation records the Storage HTTP status and response content type/length, then the downloaded Blob/byte lengths, the first eight bytes in hex, and the PDF-signature offset. PDF.js failures log a sanitized error name, message, code/status, cause, and short stack. Logs omit PDF text, request URLs and headers, and credentials. They were used in a controlled CS101 attempt: Storage returned HTTP 200 with application/pdf content, 26,799 bytes, and a PDF signature at offset zero, identifying PDF.js initialization as the failure layer.
 
-The text-extraction migration and hosted server setup have been deployed. The PDF.js worker-bundle fix is also deployed, but production extraction still fails during PDF initialization or reading. The diagnostic instrumentation currently in the local API code has not yet been deployed. The next step is to deploy those existing diagnostics and perform one controlled CS101 extraction attempt before changing extraction behavior.
+The text-extraction migration and hosted server setup have been deployed. The PDF.js worker-bundle and DOMMatrix runtime fixes are deployed, and production extraction is working. The diagnostic instrumentation was deployed and used in a controlled CS101 attempt; the extraction reached the `ready` state.
 
 ## AI and data boundaries
 
@@ -102,7 +102,7 @@ No separate backend framework is planned by default. When AI calls are introduce
 
 ## Deployment
 
-Vercel hosts the frontend and synchronous source-processing function. The text-extraction migration, hosted processing setup, and PDF.js worker-bundle fix are deployed. Production extraction still fails; deploy the local diagnostics and make one controlled CS101 attempt before changing extraction behavior.
+Vercel hosts the frontend and synchronous source-processing function. The text-extraction migration and hosted processing setup are deployed. The PDF.js worker-bundle and DOMMatrix runtime fixes and diagnostic deployment are complete; CS101 extraction has been verified in production through the `ready` state.
 
 
 
