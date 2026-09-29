@@ -7,6 +7,7 @@ const sourceIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f
 
 type ProcessableSource = { id: string; course_material_id: string; status: string };
 type SourceMaterial = { storage_path: string; file_name: string; mime_type: string; file_size: number };
+export type ExtractedPdfPage = { page_number: number; extracted_text: string };
 
 export type CourseSourceProcessorDependencies = {
   getOwnedSource(sourceId: string): Promise<ProcessableSource | null>;
@@ -14,7 +15,7 @@ export type CourseSourceProcessorDependencies = {
   getExtraction(sourceId: string): Promise<boolean>;
   claimSource(sourceId: string, expectedStatus: string): Promise<boolean>;
   downloadPdf(storagePath: string): Promise<Uint8Array>;
-  completeSource(sourceId: string, extractedText: string): Promise<void>;
+  completeSource(sourceId: string, extractedText: string, pages: ExtractedPdfPage[]): Promise<void>;
   failSource(sourceId: string, message: string): Promise<void>;
 };
 
@@ -79,7 +80,7 @@ function getSafeErrorDetails(error: unknown) {
 export async function extractPdfText(
   pdfBytes: Uint8Array,
   loadPdfJs = () => import("pdfjs-dist/legacy/build/pdf.mjs"),
-): Promise<string> {
+): Promise<{ extractedText: string; pages: ExtractedPdfPage[] }> {
   let destroyLoadingTask: (() => Promise<void>) | undefined;
   try {
     // pdfjs-dist 5.x initializes DOMMatrix at module load, even for text-only extraction.
@@ -95,7 +96,8 @@ export async function extractPdfText(
     destroyLoadingTask = () => loadingTask.destroy();
 
     const pdf = await loadingTask.promise;
-    const pages: string[] = [];
+    const pageTexts: string[] = [];
+    const extractedPages: ExtractedPdfPage[] = [];
     const textEncoder = new TextEncoder();
     let extractedByteCount = 0;
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
@@ -111,10 +113,12 @@ export async function extractPdfText(
         }
         pieces.push(item.str, separator);
       }
-      pages.push(pieces.join("").replace(/[ \t]+\n/g, "\n").trim());
+      const pageText = pieces.join("").replace(/[ \t]+\n/g, "\n").trim();
+      pageTexts.push(pageText);
+      if (pageText) extractedPages.push({ page_number: pageNumber, extracted_text: pageText });
       await page.cleanup();
     }
-    return pages.filter(Boolean).join("\n\n").trim();
+    return { extractedText: pageTexts.filter(Boolean).join("\n\n").trim(), pages: extractedPages };
   } catch (error) {
     if (error instanceof ProcessingFailure) throw error;
     console.error("[process-course-source] PDF.js extraction failed", getSafeErrorDetails(error));
@@ -127,6 +131,7 @@ export async function extractPdfText(
 export async function processCourseSource(
   sourceId: string,
   dependencies: CourseSourceProcessorDependencies,
+  options: { reprocess?: boolean } = {},
 ) {
   const source = await dependencies.getOwnedSource(sourceId);
   if (!source) {
@@ -134,7 +139,10 @@ export async function processCourseSource(
   }
 
   const alreadyExtracted = await dependencies.getExtraction(source.id);
-  if (source.status === "ready" && alreadyExtracted) {
+  if (options.reprocess && source.status !== "ready") {
+    throw new CourseSourceRequestError("Only a ready course source can be explicitly reprocessed.", 409);
+  }
+  if (source.status === "ready" && alreadyExtracted && !options.reprocess) {
     return { status: "ready" as const, alreadyProcessed: true };
   }
   if (source.status === "processing") {
@@ -173,7 +181,8 @@ export async function processCourseSource(
       throw new ProcessingFailure("The stored file does not contain a valid PDF header. Upload a valid PDF and try again.");
     }
 
-    const extractedText = await extractPdfText(pdfBytes);
+    const extraction = await extractPdfText(pdfBytes);
+    const extractedText = extraction.extractedText;
     if (!extractedText) {
       throw new ProcessingFailure("No selectable text was found. Scanned PDFs need OCR, which is not available in this processing step.");
     }
@@ -182,7 +191,7 @@ export async function processCourseSource(
     }
 
     try {
-      await dependencies.completeSource(source.id, extractedText);
+      await dependencies.completeSource(source.id, extractedText, extraction.pages);
     } catch {
       throw new ProcessingFailure("The extracted text could not be saved. Try again, and contact support if the problem continues.");
     }
@@ -219,7 +228,7 @@ function createProcessorDependencies(
     },
     async getExtraction(sourceId) {
       const { data, error } = await userClient.from("course_material_extractions")
-        .select("source_id").eq("source_id", sourceId).maybeSingle();
+        .select("source_id").eq("source_id", sourceId).limit(1).maybeSingle();
       if (error) throw error;
       return Boolean(data);
     },
@@ -250,10 +259,11 @@ function createProcessorDependencies(
       });
       return bytes;
     },
-    async completeSource(sourceId, extractedText) {
+    async completeSource(sourceId, extractedText, pages) {
       const { error } = await serviceClient.rpc("complete_course_material_extraction", {
         p_source_id: sourceId,
         p_extracted_text: extractedText,
+        p_pages: pages,
       });
       if (error) throw error;
     },
@@ -298,14 +308,17 @@ export default {
       return jsonResponse(413, { error: "The request is too large." });
     }
 
-    let body: { sourceId?: unknown };
+    let body: { sourceId?: unknown; reprocess?: unknown };
     try {
-      body = await request.json() as { sourceId?: unknown };
+      body = await request.json() as { sourceId?: unknown; reprocess?: unknown };
     } catch {
       return jsonResponse(400, { error: "The request body must be valid JSON." });
     }
     if (typeof body.sourceId !== "string" || !sourceIdPattern.test(body.sourceId)) {
       return jsonResponse(400, { error: "A valid course source ID is required." });
+    }
+    if (body.reprocess !== undefined && typeof body.reprocess !== "boolean") {
+      return jsonResponse(400, { error: "The reprocess option must be a boolean." });
     }
 
     const bearer = request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
@@ -340,7 +353,7 @@ export default {
       });
 
       stage = "course source processing";
-      const result = await processCourseSource(body.sourceId, createProcessorDependencies(userClient, serviceClient));
+      const result = await processCourseSource(body.sourceId, createProcessorDependencies(userClient, serviceClient), { reprocess: body.reprocess === true });
       return jsonResponse(200, result);
     } catch (error) {
       if (error instanceof CourseSourceRequestError) {

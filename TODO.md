@@ -24,7 +24,7 @@ This roadmap is phased. Future work remains open until it is implemented and che
 - [x] Add the Admin lecturer-application queue with approve/reject actions through the existing review RPC.
 - [x] Build the authenticated role-aware application shell and Student dashboard with honest empty states.
 
-The identity, course, enrollment, course-material, Course Brain source-status, and text-extraction migrations are deployed to the configured Supabase project, and the hosted processing setup is configured. The PDF.js worker-bundle fix is deployed. Production PDF extraction is working: the PDF.js/DOMMatrix initialization issue has been fixed, deployed diagnostics identified the failure layer, and CS101 extraction was verified in production with the source reaching `ready`. Email confirmation settings remain to be checked.
+The identity, course, enrollment, course-material, Course Brain source-status, and text-extraction migrations are deployed to the configured Supabase project, and the hosted processing setup is configured. The PDF.js worker-bundle fix is deployed. Production PDF extraction is working: the PDF.js/DOMMatrix initialization issue has been fixed, deployed diagnostics identified the failure layer, and CS101 extraction was verified in production with the source reaching `ready`. Email confirmation settings remain to be checked. The source-version/page-traceability migration is local and has not been applied to the configured Supabase project.
 ## Phase 2 â€” Course management and course materials
 
 - [x] Define the initial course and membership workflow; student join requests require lecturer approval.
@@ -44,7 +44,9 @@ The identity, course, enrollment, course-material, Course Brain source-status, a
 - [x] Apply `20260927100000_course_material_extractions.sql`, configure the hosted processor, and deploy the PDF.js worker-bundle fix; production extraction is verified working after the DOMMatrix runtime fix.
 - [x] Deploy the diagnostics and perform one controlled CS101 extraction attempt; Storage returned valid PDF bytes and diagnostics identified PDF.js initialization as the failure layer.
 - [x] Fix PDF.js Node initialization with a DOMMatrix shim and verify CS101 extraction reaches `ready` in production.
-- [ ] Define the V1 RAG/Course Brain pipeline: course-scoped retrieval, source traceability, and update/deletion behavior.
+- [x] Add versioned extraction records and page-level source traceability; local processor and contract tests are in place.
+- [ ] Apply `20260928100000_course_brain_source_traceability.sql` while retaining its two-argument compatibility RPC; deploy and verify the page-aware processor, explicitly reprocess existing ready sources with `{ sourceId, reprocess: true }`, then remove the compatibility overload only in a later migration. Existing aggregate-only versions remain valid and are preserved without fabricated page records.
+- [ ] Define the remaining V1 RAG pipeline: course-scoped retrieval policy and lifecycle behavior for generated references.
 - [ ] Design chunks and traceability for generated context.
 - [ ] Build lecturer review and update workflows for course knowledge.
 

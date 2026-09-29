@@ -62,6 +62,8 @@ function processorState({ status = "pending", extractedText = null, authorized =
     claimCount: 0,
     downloadCount: 0,
     completeCount: 0,
+    extractedPages: [],
+    extractionVersions: extractedText ? [{ version: 1, text: extractedText, pages: null }] : [],
     failureMessage: null,
   };
   const dependencies = {
@@ -85,11 +87,13 @@ function processorState({ status = "pending", extractedText = null, authorized =
       state.downloadCount += 1;
       return pdf;
     },
-    async completeSource(id, text) {
+    async completeSource(id, text, pages) {
       assert.equal(id, sourceId);
       assert.equal(state.status, "processing");
       state.completeCount += 1;
+      state.extractionVersions.push({ version: state.extractionVersions.length + 1, text, pages });
       state.extractedText = text;
+      state.extractedPages = pages;
       state.status = "ready";
     },
     async failSource(id, message) {
@@ -109,10 +113,14 @@ test("PDF parsing is deferred until processing so runtime import failures are co
     vercelConfig.functions["api/process-course-source.ts"].includeFiles,
     "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
   );
-  const extracted = await extractPdfText(makePdf(["Chapter One", "Chapter Two"]));
-  assert.match(extracted, /Chapter One/);
-  assert.match(extracted, /Chapter Two/);
-  assert.ok(extracted.indexOf("Chapter One") < extracted.indexOf("Chapter Two"));
+  const extraction = await extractPdfText(makePdf(["Chapter One", "Chapter Two"]));
+  assert.match(extraction.extractedText, /Chapter One/);
+  assert.match(extraction.extractedText, /Chapter Two/);
+  assert.ok(extraction.extractedText.indexOf("Chapter One") < extraction.extractedText.indexOf("Chapter Two"));
+  assert.deepEqual(extraction.pages, [
+    { page_number: 1, extracted_text: "Chapter One" },
+    { page_number: 2, extracted_text: "Chapter Two" },
+  ]);
 });
 
 test("PDF.js errors are logged for diagnostics while the extraction error stays generic", async () => {
@@ -155,6 +163,8 @@ test("a pending source moves through processing to ready and persists one extrac
   assert.equal(state.status, "ready");
   assert.equal(state.completeCount, 1);
   assert.match(state.extractedText, /Course source text/);
+  assert.deepEqual(state.extractedPages.map((page) => page.page_number), [1]);
+  assert.match(state.extractedPages[0].extracted_text, /Course source text/);
   assert.equal(state.failureMessage, null);
 });
 
@@ -167,6 +177,46 @@ test("a ready source with text is idempotent and is not downloaded again", async
   assert.equal(state.completeCount, 0);
 });
 
+test("an explicitly reprocessed ready source preserves its aggregate-only version and records new pages", async () => {
+  const originalText = "Existing aggregate-only extraction";
+  const { state, dependencies } = processorState({ status: "ready", extractedText: originalText });
+  const result = await processCourseSource(sourceId, dependencies, { reprocess: true });
+
+  assert.deepEqual(result, { status: "ready", alreadyProcessed: false });
+  assert.equal(state.claimCount, 1);
+  assert.equal(state.downloadCount, 1);
+  assert.equal(state.status, "ready");
+  assert.equal(state.extractionVersions.length, 2);
+  assert.deepEqual(state.extractionVersions[0], { version: 1, text: originalText, pages: null });
+  assert.equal(state.extractionVersions[1].version, 2);
+  assert.match(state.extractionVersions[1].text, /Course source text/);
+  assert.deepEqual(state.extractionVersions[1].pages, [
+    { page_number: 1, extracted_text: "Course source text" },
+  ]);
+});
+
+test("a failed explicit reprocess preserves the previous aggregate-only version", async () => {
+  const originalText = "Existing aggregate-only extraction";
+  const { state, dependencies } = processorState({ status: "ready", extractedText: originalText });
+  dependencies.downloadPdf = async () => { throw new Error("private storage failure"); };
+
+  await assert.rejects(
+    processCourseSource(sourceId, dependencies, { reprocess: true }),
+    /private course PDF could not be downloaded/,
+  );
+  assert.equal(state.status, "failed");
+  assert.equal(state.extractionVersions.length, 1);
+  assert.deepEqual(state.extractionVersions[0], { version: 1, text: originalText, pages: null });
+});
+test("explicit reprocessing is rejected for non-ready sources", async () => {
+  const { state, dependencies } = processorState({ status: "pending" });
+  await assert.rejects(
+    processCourseSource(sourceId, dependencies, { reprocess: true }),
+    (error) => error instanceof CourseSourceRequestError && error.statusCode === 409,
+  );
+  assert.equal(state.claimCount, 0);
+  assert.equal(state.downloadCount, 0);
+});
 test("a failed source can be retried and becomes ready", async () => {
   const { state, dependencies } = processorState({ status: "failed" });
   const result = await processCourseSource(sourceId, dependencies);
@@ -224,9 +274,16 @@ test("the HTTP endpoint rejects unauthenticated requests and contains client set
   const unauthenticated = await processCourseSourceEndpoint.fetch(new Request("https://studia.test/api/process-course-source", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sourceId }),
+    body: JSON.stringify({ sourceId, reprocess: true }),
   }));
   assert.equal(unauthenticated.status, 401);
+
+  const invalidReprocessOption = await processCourseSourceEndpoint.fetch(new Request("https://studia.test/api/process-course-source", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sourceId, reprocess: "yes" }),
+  }));
+  assert.equal(invalidReprocessOption.status, 400);
 
   const originalEnv = {
     url: process.env.VITE_SUPABASE_URL,
@@ -257,6 +314,10 @@ test("the HTTP endpoint rejects unauthenticated requests and contains client set
     else process.env.SUPABASE_SERVICE_ROLE_KEY = originalEnv.serviceRoleKey;
     console.error = originalLogger;
   }
+});
+test("the HTTP endpoint accepts only a boolean reprocess option and forwards it to the processor", () => {
+  assert.match(processorSource, /body\.reprocess !== undefined && typeof body\.reprocess !== "boolean"/);
+  assert.match(processorSource, /processCourseSource\(body\.sourceId,[\s\S]*?reprocess: body\.reprocess === true/);
 });
 test("storage, malformed PDFs, empty text, and persistence errors become failed states", async (t) => {
   await t.test("private storage download failure", async () => {
