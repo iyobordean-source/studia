@@ -24,7 +24,7 @@ This roadmap is phased. Future work remains open until it is implemented and che
 - [x] Add the Admin lecturer-application queue with approve/reject actions through the existing review RPC.
 - [x] Build the authenticated role-aware application shell and Student dashboard with honest empty states.
 
-The identity, course, enrollment, course-material, Course Brain source-status, and text-extraction migrations are deployed to the configured Supabase project, and the hosted processing setup is configured. The PDF.js worker-bundle fix is deployed. Production PDF extraction is working: the PDF.js/DOMMatrix initialization issue has been fixed, deployed diagnostics identified the failure layer, and CS101 extraction was verified in production with the source reaching `ready`. Email confirmation settings remain to be checked. The source-version/page-traceability migration is local and has not been applied to the configured Supabase project.
+The identity, course, enrollment, course-material, Course Brain source-status, and text-extraction migrations are deployed to the configured Supabase project, and the hosted processing setup is configured. The PDF.js worker-bundle fix is deployed. Production PDF extraction is working: the PDF.js/DOMMatrix initialization issue has been fixed, deployed diagnostics identified the failure layer, and CS101 extraction was verified in production with the source reaching `ready`. Email confirmation settings remain to be checked. The source-version/page-traceability and page-retrieval/search-segment/generation-limit migrations are local and have not been applied to the configured Supabase project.
 ## Phase 2 â€” Course management and course materials
 
 - [x] Define the initial course and membership workflow; student join requests require lecturer approval.
@@ -45,16 +45,18 @@ The identity, course, enrollment, course-material, Course Brain source-status, a
 - [x] Deploy the diagnostics and perform one controlled CS101 extraction attempt; Storage returned valid PDF bytes and diagnostics identified PDF.js initialization as the failure layer.
 - [x] Fix PDF.js Node initialization with a DOMMatrix shim and verify CS101 extraction reaches `ready` in production.
 - [x] Add versioned extraction records and page-level source traceability; local processor and contract tests are in place.
-- [ ] Apply `20260928100000_course_brain_source_traceability.sql` while retaining its two-argument compatibility RPC; deploy and verify the page-aware processor, explicitly reprocess existing ready sources with `{ sourceId, reprocess: true }`, then remove the compatibility overload only in a later migration. Existing aggregate-only versions remain valid and are preserved without fabricated page records.
-- [ ] Define the remaining V1 RAG pipeline: course-scoped retrieval policy and lifecycle behavior for generated references.
+
+- [x] Implement deterministic course-scoped PostgreSQL full-text retrieval over bounded, overlapping search segments for each ready source's latest successful extraction version; the RPC returns complete canonical page text and a relevant excerpt, and the migration is local and unapplied.
+- [x] Add the authenticated, stateless Gemini question-generation endpoint with structured output and source-reference validation, a 30-second Gemini request timeout, and a database-backed five-reservations-per-lecturer-per-60-second-window guard that verifies course ownership before reserving and runs before retrieval, so no-match requests consume a slot. Keep the 8,192-token output budget with concise two-sentence explanations for 5 or 10 questions; endpoint and guard migration remain local, and generated questions are not persisted.
+- [ ] Apply `20260928100000_course_brain_source_traceability.sql` and `20260929100000_course_brain_page_retrieval.sql` in order; the retrieval migration backfills bounded searchable segments from existing page evidence and creates the generation-limit table. Deploy the page-aware processor and generation endpoint; explicitly reprocess existing ready sources with `{ sourceId, reprocess: true }`; configure server-only `GEMINI_API_KEY`; and verify the hosted flow, including 5- and 10-question output. Keep the legacy two-argument completion RPC until the page-aware processor is deployed and verified, then remove it only in a later migration. Existing aggregate-only versions remain valid and are preserved without fabricated page records.
+- [ ] Define the remaining V1 RAG lifecycle, including source updates/deletion and references retained by generated drafts.
 - [ ] Design chunks and traceability for generated context.
 - [ ] Build lecturer review and update workflows for course knowledge.
 
 ## Phase 4 â€” Assessment Studio
 
 - [ ] Define assessment types and question formats for V1.
-- [ ] Add grounded assessment generation using approved course context.
-- [ ] Build lecturer question review, editing, and publishing workflows.
+- [ ] Add assessment-draft persistence and integrate grounded question output into lecturer review/editing and publishing workflows.
 - [ ] Keep unpublished drafts separate from published assessments.
 
 ## Phase 5 â€” Student assessment experience
