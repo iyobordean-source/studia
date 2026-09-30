@@ -4,7 +4,7 @@ Studia is an AI-powered university assessment and course intelligence platform. 
 
 ## Current status
 
-**Identity, course, enrollment, course-material, and Course Brain source-status foundations are applied and manually verified in the configured Supabase project.** Student and approved lecturer access use persisted profile status. The authenticated shell, course management, enrollment requests, and lecturer review are working in production. Lecturer PDFs remain private to their course. The text-extraction migration and hosted processing setup are deployed. Production PDF extraction is working: the PDF.js/DOMMatrix initialization failure was fixed, deployed diagnostics identified the failure layer, and CS101 extraction was verified in production with the source reaching `ready`. Chunking, indexing/RAG, AI generation, assessments, results, and practice remain future work. A local Git repository is initialized on main; a GitHub remote has not been set up.
+**Identity, course, enrollment, course-material, and Course Brain source-status foundations are applied and manually verified in the configured Supabase project.** Student and approved lecturer access use persisted profile status. The authenticated shell, course management, enrollment requests, and lecturer review are working in production. Lecturer PDFs remain private to their course. The text-extraction migration and hosted processing setup are deployed. Production PDF extraction is working: the PDF.js/DOMMatrix initialization failure was fixed, deployed diagnostics identified the failure layer, and CS101 extraction was verified in production with the source reaching `ready`. The local versioned page-traceability and page-retrieval migrations and matching page-aware processor are not yet deployed or applied; current production extraction records remain aggregate-only. An authenticated backend page-retrieval and stateless, validated Gemini practice-question endpoint are implemented locally; production use awaits the migrations, deployment, and server-only `GEMINI_API_KEY` configuration. Generated questions are not saved. Assessment persistence/review, student UI, chunking/embeddings, results, and practice remain future work. A local Git repository is initialized on main; a GitHub remote has not been set up.
 ## Core product loop
 
 Course materials -> Course Brain and course-scoped RAG -> grounded assessment generation -> lecturer review and editing -> published assessment -> student assessment -> grading -> topic performance -> weak-area identification -> targeted practice -> reassessment.
@@ -16,13 +16,13 @@ Course materials -> Course Brain and course-scoped RAG -> grounded assessment ge
 - Tailwind CSS
 - Supabase JavaScript client and Auth
 - Supabase identity, course, enrollment, course-material, Course Brain source-status, and text-extraction migrations are deployed to the configured project; the hosted processing setup is configured
-- Gemini API, planned provider for V1 grounded AI; RAG/source grounding is a V1 capability, not yet implemented
+- Gemini Interactions API for the local stateless question-generation endpoint; the server-side key and production configuration are not yet enabled
 - PDF.js for server-side selectable PDF text extraction
 - Vercel Node functions for the trusted processor and frontend deployment
 - Git and GitHub
 - Lucide React for interface icons
 
-Only the libraries needed for the current scope are installed. Supabase Auth, identity, courses, enrollment, course materials, and source status are working in production. The PDF.js worker-bundle and DOMMatrix runtime fixes and diagnostic deployment are complete. Production extraction was verified with CS101 reaching `ready`. Chunking, retrieval, and AI are not connected.
+Only the libraries needed for the current scope are installed. Supabase Auth, identity, courses, enrollment, course materials, and source status are working in production. The PDF.js worker-bundle and DOMMatrix runtime fixes and diagnostic deployment are complete. Production extraction was verified with CS101 reaching `ready`. The page-traceability and retrieval migrations are local and unapplied; page-aware extraction, retrieval, and Gemini question generation are not active in production.
 
 ## Documentation
 
@@ -45,7 +45,7 @@ npm run dev
 
 Vite prints a local URL after the development server starts.
 
-`npm run test` runs the existing identity/course contract checks and focused PDF-processing tests. They verify local state transitions and migration contracts, not hosted RPCs or live RLS. The configured project has identity, course, enrollment, materials, Course Brain source-status, and text-extraction migrations deployed. The hosted processing setup, PDF.js worker-bundle and DOMMatrix runtime fixes, and diagnostics are deployed. A controlled CS101 attempt confirmed valid Storage PDF bytes and verified that extraction reaches `ready` in production. A lecturer can manually process or retry a pending source; page loading never starts processing. The identity migration creates non-privileged onboarding profiles and restrictive identity RLS/function policies. Email confirmation and Google OAuth return to `/app`, which resolves the persisted profile and routes to onboarding or the role area. Add the local and production `/app` destinations to Supabase Auth URL Configuration.
+`npm run test` runs identity/course contracts, focused PDF-processing tests, and mocked course-question generation/retrieval contract tests. They verify local state transitions and migration contracts, not hosted RPCs or live RLS. The configured project has identity, course, enrollment, materials, Course Brain source-status, and text-extraction migrations deployed. The hosted processing setup, PDF.js worker-bundle and DOMMatrix runtime fixes, and diagnostics are deployed. A controlled CS101 attempt confirmed valid Storage PDF bytes and verified that extraction reaches `ready` in production. A lecturer can manually process or retry a pending source; page loading never starts processing. The identity migration creates non-privileged onboarding profiles and restrictive identity RLS/function policies. Email confirmation and Google OAuth return to `/app`, which resolves the persisted profile and routes to onboarding or the role area. Add the local and production `/app` destinations to Supabase Auth URL Configuration.
 
 For development Admin provisioning, create the intended Auth user through a trusted Supabase Dashboard action, then have a project owner run this in the SQL Editor with that user Auth UUID. Do not add public Admin signup or frontend promotion controls. The migration `review_lecturer_application` function checks active Admin status.
 

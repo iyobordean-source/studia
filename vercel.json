@@ -7,6 +7,9 @@
     "api/process-course-source.ts": {
       "maxDuration": 60,
       "includeFiles": "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"
+    },
+    "api/generate-course-questions.ts": {
+      "maxDuration": 60
     }
   }
 }
