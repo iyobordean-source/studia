@@ -66,6 +66,38 @@ function readGeneratedQuestions(value: unknown, expectedCount: number): Generate
   return questions;
 }
 
+async function loadMaterialTitles(sourceIds: string[]): Promise<Record<string, string>> {
+  if (!supabase || sourceIds.length === 0) return {};
+  try {
+    const { data: sourceRows, error: sourceError } = await supabase
+      .from("course_material_sources")
+      .select("id, course_material_id")
+      .in("id", sourceIds);
+    if (sourceError) return {};
+
+    const sources = (sourceRows ?? []) as unknown as Array<{ id: string; course_material_id: string }>;
+    if (sources.length === 0) return {};
+    const materialIds = [...new Set(sources.map((source) => source.course_material_id))];
+    const { data: materialRows, error: materialError } = await supabase
+      .from("course_materials")
+      .select("id, title")
+      .in("id", materialIds);
+    if (materialError) return {};
+
+    const titlesByMaterialId: Record<string, string> = {};
+    for (const material of (materialRows ?? []) as unknown as Array<{ id: string; title: string }>) {
+      if (material.title.trim()) titlesByMaterialId[material.id] = material.title.trim();
+    }
+    const titlesBySourceId: Record<string, string> = {};
+    for (const source of sources) {
+      const title = titlesByMaterialId[source.course_material_id];
+      if (title) titlesBySourceId[source.id.toLowerCase()] = title;
+    }
+    return titlesBySourceId;
+  } catch {
+    return {};
+  }
+}
 function errorMessage(error: unknown) {
   return error instanceof Error && error.message.trim()
     ? error.message
@@ -78,6 +110,7 @@ export function CourseQuestionGeneration({ courseId }: { courseId: string }) {
   const [questionCount, setQuestionCount] = useState<5 | 10>(5);
   const [difficulty, setDifficulty] = useState<QuestionDifficulty>("medium");
   const [questions, setQuestions] = useState<GeneratedQuestion[] | null>(null);
+  const [materialTitles, setMaterialTitles] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -115,6 +148,8 @@ export function CourseQuestionGeneration({ courseId }: { courseId: string }) {
 
       const generated = readGeneratedQuestions(result, questionCount);
       if (!generated) throw new Error("The generated questions could not be displayed. Please try again.");
+      const sourceIds = [...new Set(generated.flatMap((question) => question.sources.map((source) => source.source_id)))];
+      setMaterialTitles(await loadMaterialTitles(sourceIds));
       setQuestions(generated);
     } catch (requestError) {
       setError(errorMessage(requestError));
@@ -242,8 +277,8 @@ export function CourseQuestionGeneration({ courseId }: { courseId: string }) {
                     <h5>Sources</h5>
                     <ul>
                       {question.sources.map((source) => (
-                        <li key={source.source_id + "-" + source.extraction_version + "-" + source.page_number}>
-                          Page {source.page_number} · extraction version {source.extraction_version} · source {source.source_id}
+                        <li className="course-question-citation" key={source.source_id + "-" + source.extraction_version + "-" + source.page_number}>
+                          {materialTitles[source.source_id.toLowerCase()] || "Course material"} · Page {source.page_number}
                         </li>
                       ))}
                     </ul>

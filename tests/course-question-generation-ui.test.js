@@ -23,6 +23,10 @@ test("review displays every question with four options, answer, explanation, and
   assert.match(component, /question\.options\.map\(\(option, optionIndex\)/);
   assert.match(component, /Correct answer/);
   assert.match(component, /question\.explanation/);
-  assert.match(component, /Page \{source\.page_number\} · extraction version \{source\.extraction_version\} · source \{source\.source_id\}/);
+  const citationMarkup = component.match(/<li className="course-question-citation"[\s\S]*?>([\s\S]*?)<\/li>/)?.[1];
+  assert.ok(citationMarkup, "citation markup should be present");
+  assert.match(citationMarkup, /materialTitles\[source\.source_id\.toLowerCase\(\)\] \|\| "Course material"/);
+  assert.match(citationMarkup, /Page \{source\.page_number\}/);
+  assert.doesNotMatch(citationMarkup, /extraction version|source \{source\.source_id\}/i);
   assert.match(component, /These questions have not been saved or published/);
 });
