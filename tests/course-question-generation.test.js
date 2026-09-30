@@ -3,9 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   CourseQuestionAccessError,
+  GeminiHttpError,
   GeminiRequestTimeoutError,
   createCourseQuestionHandler,
   requestGemini,
+  requestGroq,
   validateGeneratedQuestions,
 } from "../api/generate-course-questions.ts";
 
@@ -53,7 +55,7 @@ function request(body, withAuth = true) {
 }
 
 function dependencies(overrides = {}) {
-  const state = { retrieved: [], generated: [], authenticated: [], reserved: [], events: [] };
+  const state = { retrieved: [], generated: [], fallbackGenerated: [], authenticated: [], reserved: [], events: [] };
   return {
     state,
     isConfigured: () => true,
@@ -77,6 +79,11 @@ function dependencies(overrides = {}) {
       state.generated.push(input);
       return makeQuestions(input.questionCount);
     },
+    async generateFallback(input) {
+      state.events.push("groq");
+      state.fallbackGenerated.push(input);
+      return makeQuestions(input.questionCount);
+    },
     ...overrides,
   };
 }
@@ -96,6 +103,7 @@ test("question generation requires a signed-in user and valid bounded input", as
   assert.deepEqual(deps.state.authenticated, []);
   assert.deepEqual(deps.state.reserved, []);
   assert.deepEqual(deps.state.retrieved, []);
+  assert.deepEqual(deps.state.fallbackGenerated, []);
 
   const invalid = await handler.fetch(request({ ...validRequest, questionCount: 6 }));
   assert.equal(invalid.status, 400);
@@ -126,6 +134,7 @@ test("authenticated lecturer generation retrieves only through the course-author
   assert.deepEqual(body.questions[0].sources, [
     { source_id: sourceId, extraction_version: 2, page_number: 4 },
   ]);
+  assert.deepEqual(deps.state.fallbackGenerated, []);
 });
 
 test("supports ten easy questions", async () => {
@@ -284,7 +293,9 @@ test("Gemini failure diagnostics log redacted provider details without exposing 
     globalThis.fetch = async () => {
       throw new TypeError("Socket unavailable for " + apiKey);
     };
-    await assert.rejects(requestGemini(apiKey, input), /Socket unavailable/);
+    const thrownError = await requestGemini(apiKey, input).catch((error) => error);
+    assert.match(thrownError.message, /Gemini request failed/);
+    assert.doesNotMatch(thrownError.message, /test-only-gemini-key/);
     const thrownDiagnostic = JSON.stringify(logs);
     assert.match(thrownDiagnostic, /TypeError/);
     assert.match(thrownDiagnostic, /Socket unavailable for \[redacted\]/);
@@ -424,10 +435,201 @@ test("Gemini abort timeout returns a safe 504 response", async () => {
 test("the server endpoint authenticates with the caller token and reads Gemini credentials only from server env", () => {
   assert.match(apiSource, /const geminiRequestTimeoutMs = 30_000/);
   assert.match(apiSource, /process\.env\.GEMINI_API_KEY/);
+  assert.match(apiSource, /process\.env\.GROQ_API_KEY/);
+  assert.doesNotMatch(apiSource, /VITE_GROQ_API_KEY/);
   assert.match(apiSource, /client\.auth\.getUser\(token\)/);
   assert.match(apiSource, /client\.rpc\("retrieve_course_material_pages"/);
   assert.match(apiSource, /client\.rpc\("reserve_course_question_generation"/);
   assert.match(apiSource, /"x-goog-api-key": apiKey/);
   assert.doesNotMatch(apiSource, /VITE_GEMINI_API_KEY/);
   assert.doesNotMatch(apiSource, /SUPABASE_SERVICE_ROLE_KEY/);
+});
+for (const status of [429, 500, 502, 503, 504]) {
+  test("Gemini HTTP " + status + " uses Groq with the same retrieved context", async () => {
+    const deps = dependencies({
+      async generate(input) {
+        this.state.events.push("generate");
+        this.state.generated.push(input);
+        throw new GeminiHttpError(status);
+      },
+    });
+    const response = await createCourseQuestionHandler(deps).fetch(request(validRequest));
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.questions.length, 5);
+    assert.deepEqual(deps.state.events, ["authenticate", "reserve", "retrieve", "generate", "groq"]);
+    assert.deepEqual(deps.state.fallbackGenerated[0], deps.state.generated[0]);
+    assert.deepEqual(body.questions[0].sources, [
+      { source_id: sourceId, extraction_version: 2, page_number: 4 },
+    ]);
+  });
+}
+
+test("non-transient Gemini HTTP and request failures do not call Groq", async () => {
+  for (const failure of [
+    new GeminiHttpError(401),
+    new GeminiHttpError(403),
+    new TypeError("Gemini request could not be started."),
+  ]) {
+    const deps = dependencies({
+      async generate() { throw failure; },
+    });
+    const response = await createCourseQuestionHandler(deps).fetch(request(validRequest));
+    assert.equal(response.status, 502);
+    assert.match((await response.json()).error, /could not be completed/);
+    assert.deepEqual(deps.state.fallbackGenerated, []);
+  }
+
+  const unconfigured = dependencies({ isConfigured: () => false });
+  const unavailable = await createCourseQuestionHandler(unconfigured).fetch(request(validRequest));
+  assert.equal(unavailable.status, 503);
+  assert.deepEqual(unconfigured.state.fallbackGenerated, []);
+});
+
+test("Groq uses the same grounded input and strict question schema as Gemini", async () => {
+  const input = {
+    ...validRequest,
+    resultLimit: 8,
+    courseName: retrievedPage.course_name,
+    pages: [retrievedPage],
+  };
+  const expected = makeQuestions();
+  const originalFetch = globalThis.fetch;
+  const captured = [];
+  globalThis.fetch = async (url, init) => {
+    captured.push({ url: String(url), init });
+    if (String(url).includes("generativelanguage.googleapis.com")) {
+      return Response.json({
+        status: "completed",
+        steps: [{ type: "model_output", content: [{ type: "text", text: JSON.stringify(expected) }] }],
+      });
+    }
+    return Response.json({
+      choices: [{ message: { content: JSON.stringify(expected) } }],
+    });
+  };
+  try {
+    await requestGemini("test-gemini-key", input);
+    assert.deepEqual(await requestGroq("test-groq-key", input), expected);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(captured.length, 2);
+  const geminiBody = JSON.parse(captured[0].init.body);
+  const groqBody = JSON.parse(captured[1].init.body);
+  assert.equal(captured[1].url, "https://api.groq.com/openai/v1/chat/completions");
+  assert.equal(captured[1].init.headers.Authorization, "Bearer test-groq-key");
+  assert.equal(groqBody.model, "openai/gpt-oss-120b");
+  assert.deepEqual(groqBody.messages, [
+    { role: "system", content: geminiBody.system_instruction },
+    { role: "user", content: geminiBody.input },
+  ]);
+  assert.equal(groqBody.response_format.type, "json_schema");
+  assert.equal(groqBody.response_format.json_schema.strict, true);
+  assert.deepEqual(JSON.parse(groqBody.messages[1].content).retrievedPages[0], {
+    source_id: sourceId,
+    extraction_version: 2,
+    page_number: 4,
+    relevant_text: retrievedPage.relevant_text,
+  });
+  assert.equal(Object.hasOwn(JSON.parse(groqBody.messages[1].content).retrievedPages[0], "page_text"), false);
+
+  const visit = (schema) => {
+    if (Array.isArray(schema)) {
+      for (const item of schema) visit(item);
+      return;
+    }
+    if (!schema || typeof schema !== "object") return;
+    if (schema.type === "object") {
+      assert.equal(schema.additionalProperties, false);
+      assert.deepEqual([...schema.required].sort(), Object.keys(schema.properties).sort());
+    }
+    for (const child of Object.values(schema)) visit(child);
+  };
+  visit(groqBody.response_format.json_schema.schema);
+});
+
+test("Groq output uses the existing validator and invalid fallback output stays generic", async () => {
+  const invalidGroqOutput = makeQuestions(5, [{
+    source_id: "e1000000-0000-4000-8000-000000000001",
+    extraction_version: 2,
+    page_number: 4,
+  }]);
+  const deps = dependencies({
+    async generate() { throw new GeminiHttpError(503); },
+    async generateFallback(input) {
+      this.state.events.push("groq");
+      this.state.fallbackGenerated.push(input);
+      return invalidGroqOutput;
+    },
+  });
+  const response = await createCourseQuestionHandler(deps).fetch(request(validRequest));
+  assert.equal(response.status, 502);
+  const body = await response.json();
+  assert.equal(body.error, "Question generation could not be completed. Try again later.");
+  assert.doesNotMatch(body.error, /source_id|Gemini returned/);
+  assert.throws(
+    () => validateGeneratedQuestions(invalidGroqOutput, 5, [retrievedPage]),
+    /not part of retrieved context/,
+  );
+});
+
+test("failed Gemini and Groq responses remain generic and never log provider keys", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalConsoleError = console.error;
+  const geminiKey = "test-only-gemini-key";
+  const groqKey = "gsk_" + "x".repeat(48);
+  const logs = [];
+  console.error = (...args) => logs.push(args);
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("generativelanguage.googleapis.com")) {
+      return new Response(
+        "Rejected " + geminiKey + " and " + groqKey + "; Authorization: Bearer test-access-secret",
+        { status: 503 },
+      );
+    }
+    return new Response(
+      "Rejected " + groqKey + "; Authorization: Bearer test-access-secret",
+      { status: 503 },
+    );
+  };
+  try {
+    const deps = dependencies({
+      async generate(input) { return requestGemini(geminiKey, input); },
+      async generateFallback(input) { return requestGroq(groqKey, input); },
+    });
+    const response = await createCourseQuestionHandler(deps).fetch(request(validRequest));
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error, "Question generation could not be completed. Try again later.");
+    const diagnosticText = JSON.stringify(logs);
+    assert.doesNotMatch(diagnosticText, /test-only-gemini-key|gsk_x{48}|test-access-secret/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.error = originalConsoleError;
+  }
+});
+
+test("Groq request timeout aborts the request and cannot leak its API key", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalConsoleError = console.error;
+  const groqKey = "gsk_" + "y".repeat(48);
+  const logs = [];
+  console.error = (...args) => logs.push(args);
+  globalThis.fetch = async (_url, init) => new Promise((_resolve, reject) => {
+    init.signal.addEventListener("abort", () => reject(init.signal.reason), { once: true });
+  });
+  try {
+    const error = await requestGroq(groqKey, {
+      ...validRequest,
+      courseName: retrievedPage.course_name,
+      pages: [retrievedPage],
+    }, 5).catch((value) => value);
+    assert.match(error.message, /fallback provider could not complete/);
+    assert.doesNotMatch(error.message, /gsk_y{48}/);
+    assert.doesNotMatch(JSON.stringify(logs), /gsk_y{48}/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.error = originalConsoleError;
+  }
 });
