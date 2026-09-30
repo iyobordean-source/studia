@@ -246,6 +246,54 @@ test("Gemini uses stateless structured output and keeps its API key server-side"
   assert.match(body.system_instruction, /two sentences/);
 });
 
+test("Gemini failure diagnostics log redacted provider details without exposing them to callers", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalConsoleError = console.error;
+  const apiKey = "test-only-gemini-key";
+  const logs = [];
+  console.error = (...args) => logs.push(args);
+  const input = {
+    ...validRequest,
+    resultLimit: 8,
+    courseName: retrievedPage.course_name,
+    pages: [retrievedPage],
+  };
+
+  try {
+    globalThis.fetch = async () => Response.json({
+      error: { message: "Rejected API key " + apiKey + "; Authorization: Bearer test-private-token" },
+    }, { status: 403 });
+
+    const handler = createCourseQuestionHandler(dependencies({
+      async generate(geminiInput) {
+        return requestGemini(apiKey, geminiInput);
+      },
+    }));
+    const response = await handler.fetch(request(validRequest));
+    const responseBody = await response.text();
+    assert.equal(response.status, 502);
+    assert.match(responseBody, /Question generation could not be completed/);
+    assert.doesNotMatch(responseBody, /Rejected API key|test-private-token|test-only-gemini-key/);
+
+    const httpDiagnostic = JSON.stringify(logs);
+    assert.match(httpDiagnostic, /403/);
+    assert.match(httpDiagnostic, /Rejected API key/);
+    assert.match(httpDiagnostic, /responseBody/);
+    assert.doesNotMatch(httpDiagnostic, /test-only-gemini-key|test-private-token/);
+
+    globalThis.fetch = async () => {
+      throw new TypeError("Socket unavailable for " + apiKey);
+    };
+    await assert.rejects(requestGemini(apiKey, input), /Socket unavailable/);
+    const thrownDiagnostic = JSON.stringify(logs);
+    assert.match(thrownDiagnostic, /TypeError/);
+    assert.match(thrownDiagnostic, /Socket unavailable for \[redacted\]/);
+    assert.doesNotMatch(thrownDiagnostic, /test-only-gemini-key/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.error = originalConsoleError;
+  }
+});
 test("incomplete Gemini interactions are rejected", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => Response.json({

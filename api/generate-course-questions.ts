@@ -214,6 +214,22 @@ function createGeminiSchema() {
   };
 }
 
+function redactGeminiDiagnosticText(value: string, apiKey: string, limit = 4000) {
+  let safe = apiKey ? value.split(apiKey).join("[redacted]") : value;
+  safe = safe
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer [redacted]")
+    .replace(/(["']?\b(?:authorization|proxy-authorization|x-goog-api-key)["']?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/gi, "$1[redacted]");
+  return safe.slice(0, limit);
+}
+
+function safeGeminiErrorDetails(error: unknown, apiKey: string) {
+  const name = error instanceof Error ? error.name : typeof error;
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    name: redactGeminiDiagnosticText(name, apiKey, 100),
+    message: redactGeminiDiagnosticText(message, apiKey, 1000),
+  };
+}
 export async function requestGemini(
   apiKey: string,
   input: GeminiInput,
@@ -251,6 +267,8 @@ export async function requestGemini(
   };
 
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  let responseStatus: number | undefined;
+  let responseBody: string | undefined;
   try {
     const response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
       method: "POST",
@@ -259,7 +277,11 @@ export async function requestGemini(
       redirect: "error",
       signal: timeoutSignal,
     });
-    if (!response.ok) throw new Error("Gemini request failed.");
+    responseStatus = response.status;
+    if (!response.ok) {
+      responseBody = await response.text();
+      throw new Error("Gemini request failed.");
+    }
 
     const payload: unknown = await response.json();
     if (!isRecord(payload) || payload.status !== "completed" || !Array.isArray(payload.steps)) throw new Error("Gemini returned an incomplete or invalid response.");
@@ -271,6 +293,11 @@ export async function requestGemini(
     if (outputParts.length === 0) throw new Error("Gemini returned no question output.");
     return JSON.parse(outputParts.join("\n")) as unknown;
   } catch (error) {
+    console.error("[generate-course-questions] Gemini request failed", {
+      ...safeGeminiErrorDetails(error, apiKey),
+      ...(responseStatus === undefined ? {} : { status: responseStatus }),
+      ...(responseBody === undefined ? {} : { responseBody: redactGeminiDiagnosticText(responseBody, apiKey) }),
+    });
     if (timeoutSignal.aborted) {
       throw new GeminiRequestTimeoutError("Gemini did not respond before the request timeout.");
     }
