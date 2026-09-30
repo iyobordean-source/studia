@@ -1116,3 +1116,241 @@
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
+
+.course-question-generation > h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.course-question-intro,
+.course-question-review-note {
+  max-width: 650px;
+  margin: 10px 0 0;
+  color: #555b53;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.course-question-open {
+  min-height: 42px;
+  margin-top: 18px;
+}
+
+.course-question-form {
+  display: grid;
+  max-width: 690px;
+  gap: 17px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.course-question-form input,
+.course-question-form select {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 12px;
+  color: var(--ink);
+  background: var(--warm-white);
+  border: 1px solid #c8c8bd;
+  border-radius: 3px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.course-question-form input:hover,
+.course-question-form select:hover {
+  border-color: #8d978b;
+}
+
+.course-question-form input:focus-visible,
+.course-question-form select:focus-visible,
+.course-question-generation .button:focus-visible {
+  outline: 3px solid #6a8c73;
+  outline-offset: 2px;
+  border-color: var(--moss);
+}
+
+.course-question-form-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 20px;
+}
+
+.course-question-form input:disabled,
+.course-question-form select:disabled {
+  cursor: wait;
+  opacity: 0.75;
+}
+
+.course-question-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.course-question-actions .button {
+  min-height: 42px;
+}
+
+.course-question-review {
+  margin-top: 24px;
+  padding-top: 21px;
+  border-top: 1px solid var(--line);
+}
+
+.course-question-review-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.course-question-review-heading .auth-kicker {
+  margin: 0 0 7px;
+}
+
+.course-question-review-heading h3 {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: clamp(23px, 3vw, 30px);
+  font-weight: 400;
+  letter-spacing: -0.035em;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.course-question-review-heading .button {
+  min-height: 40px;
+  flex: 0 0 auto;
+}
+
+.course-question-list {
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.course-question-item {
+  padding: 22px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.course-question-item h4 {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.course-question-item h4 span {
+  color: var(--moss);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.course-question-options {
+  display: grid;
+  gap: 0;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style-position: inside;
+  border-top: 1px solid var(--line);
+}
+
+.course-question-options li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 11px;
+  color: #41483f;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.course-question-options li.is-correct {
+  background: var(--sage);
+}
+.course-question-option-copy {
+  display: flex;
+  min-width: 0;
+  gap: 9px;
+}
+
+.course-question-option-letter {
+  flex: 0 0 auto;
+  color: var(--deep-moss);
+  font-weight: 700;
+}
+
+
+.course-question-correct-label {
+  flex: 0 0 auto;
+  color: var(--deep-moss);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.course-question-explanation,
+.course-question-sources {
+  margin-top: 16px;
+}
+
+.course-question-explanation h5,
+.course-question-sources h5 {
+  margin: 0 0 6px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.course-question-explanation p,
+.course-question-sources li {
+  margin: 0;
+  color: #555b53;
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.course-question-sources ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+@media (max-width: 650px) {
+  .course-question-form-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .course-question-review-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .course-question-review-heading .button {
+    width: 100%;
+  }
+
+  .course-question-options li {
+    flex-direction: column;
+    gap: 5px;
+  }
+}

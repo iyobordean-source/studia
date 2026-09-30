@@ -6,6 +6,7 @@ import { courseAreaRoutes } from "./appNavigation";
 import { supabase, supabaseConfigurationError } from "./supabase";
 import { LecturerCourseEnrollment, StudentCourseDiscovery } from "./CourseEnrollment";
 import { CourseMaterialsSection } from "./CourseMaterials";
+import { CourseQuestionGeneration } from "./CourseQuestionGeneration";
 
 type Course = {
   id: string;
@@ -462,6 +463,7 @@ function CourseDetailPage({ audience }: { audience: "student" | "lecturer" }) {
       </section>
 
       {audience === "lecturer" && <LecturerCourseEnrollment courseId={course.id} />}
+      {audience === "lecturer" && <CourseQuestionGeneration courseId={course.id} />}
 
       <CourseMaterialsSection
         key={course.id}
