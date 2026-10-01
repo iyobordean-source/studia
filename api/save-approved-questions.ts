@@ -3,7 +3,7 @@ import {
   validateGeneratedQuestions,
   type GeneratedQuestion,
   type RetrievedCoursePage,
-} from "../src/lib/course-question-validation.ts";
+} from "../src/lib/course-question-validation.js";
 
 const courseIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const maxRequestBytes = 256 * 1024;

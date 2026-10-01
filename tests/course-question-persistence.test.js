@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createSaveApprovedQuestionsHandler } from "../api/save-approved-questions.ts";
-import { validateGeneratedQuestions as validateSharedQuestions } from "../src/lib/course-question-validation.ts";
+import { validateGeneratedQuestions as validateSharedQuestions } from "../src/lib/course-question-validation.js";
 
 const courseId = "c1000000-0000-4000-8000-000000000001";
 const sourceId = "d1000000-0000-4000-8000-000000000001";
@@ -124,9 +124,10 @@ test("questions stay temporary until the lecturer selects the explicit save acti
   assert.match(component, /Questions saved successfully\./);
   assert.match(component, /fetch\("\/api\/save-approved-questions"/);
 });
-test("both endpoints import the shared validator without importing another API route", () => {
-  assert.match(generationApiSource, /from ["']\.\.\/src\/lib\/course-question-validation\.ts["']/);
-  assert.match(saveApiSource, /from ["']\.\.\/src\/lib\/course-question-validation\.ts["']/);
+test("both endpoints import the shared JavaScript validator without raw TypeScript or API-route imports", () => {
+  assert.match(generationApiSource, /from ["']\.\.\/src\/lib\/course-question-validation\.js["']/);
+  assert.match(saveApiSource, /from ["']\.\.\/src\/lib\/course-question-validation\.js["']/);
+  assert.doesNotMatch(generationApiSource + saveApiSource, /course-question-validation\.ts/);
   assert.doesNotMatch(saveApiSource, /from ["']\.\/generate-course-questions(?:\.ts)?["']/);
 });
 

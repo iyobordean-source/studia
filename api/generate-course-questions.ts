@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { InvalidQuestionOutputError, validateGeneratedQuestions } from "../src/lib/course-question-validation.ts";
-import type { GeneratedQuestion, RetrievedCoursePage } from "../src/lib/course-question-validation.ts";
+import { InvalidQuestionOutputError, validateGeneratedQuestions } from "../src/lib/course-question-validation.js";
+import type { GeneratedQuestion, RetrievedCoursePage } from "../src/lib/course-question-validation.js";
 
 export { validateGeneratedQuestions };
 export type { GeneratedQuestion, RetrievedCoursePage };
