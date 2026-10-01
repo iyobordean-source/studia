@@ -112,6 +112,9 @@ export function CourseQuestionGeneration({ courseId }: { courseId: string }) {
   const [questions, setQuestions] = useState<GeneratedQuestion[] | null>(null);
   const [materialTitles, setMaterialTitles] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [error, setError] = useState("");
 
   async function generateQuestions(event: FormEvent<HTMLFormElement>) {
@@ -158,8 +161,54 @@ export function CourseQuestionGeneration({ courseId }: { courseId: string }) {
     }
   }
 
+  async function saveApprovedQuestions() {
+    setSaveError("");
+    setSaving(true);
+    try {
+      if (!supabase) throw new Error(supabaseConfigurationError);
+      const { data, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      const accessToken = data.session?.access_token;
+      if (!accessToken) throw new Error("Your session has expired. Sign in again, then retry.");
+
+      const response = await fetch("/api/save-approved-questions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + accessToken,
+        },
+        body: JSON.stringify({ courseId, questions }),
+      });
+      let result: unknown = null;
+      try {
+        result = await response.json();
+      } catch {
+        // Use the safe fallback below when the endpoint does not return JSON.
+      }
+      if (!response.ok) {
+        const message = isRecord(result) && typeof result.error === "string" && result.error.trim()
+          ? result.error
+          : "Approved questions could not be saved. Please try again.";
+        throw new Error(message);
+      }
+      if (!isRecord(result)
+        || !Array.isArray(result.savedQuestions)
+        || result.savedQuestions.length !== questions?.length
+        || !result.savedQuestions.every((item) => isRecord(item) && typeof item.id === "string" && sourceIdPattern.test(item.id))) {
+        throw new Error("The saved questions could not be confirmed. Refresh the page before trying again.");
+      }
+      setSaved(true);
+    } catch (requestError) {
+      setSaveError(errorMessage(requestError));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function returnToForm() {
     setQuestions(null);
+    setSaved(false);
+    setSaveError("");
     setError("");
     setOpen(true);
   }
@@ -249,7 +298,7 @@ export function CourseQuestionGeneration({ courseId }: { courseId: string }) {
               Generate another set
             </button>
           </div>
-          <p className="course-question-review-note">These questions have not been saved or published. Check the answer, explanation, and page sources before use.</p>
+          <p className="course-question-review-note">{saved ? "These questions are saved in this course and have not been published." : "These questions have not been saved or published. Check the answer, explanation, and page sources before use."}</p>
           <ol className="course-question-list" aria-label="Generated question drafts">
             {questions.map((question, questionIndex) => (
               <li className="course-question-item" key={questionIndex}>
@@ -287,6 +336,19 @@ export function CourseQuestionGeneration({ courseId }: { courseId: string }) {
               </li>
             ))}
           </ol>
+          <div className="course-question-actions">
+            {saveError && <p className="auth-error" role="alert">{saveError}</p>}
+            {saved && <p className="course-feedback" role="status">Questions saved successfully.</p>}
+            <button
+              className="button button-primary"
+              type="button"
+              onClick={() => void saveApprovedQuestions()}
+              disabled={saving || saved}
+            >
+              {saving && <LoaderCircle aria-hidden="true" size={16} className="auth-spinner" />}
+              {saving ? "Saving questions…" : saved ? "Questions saved" : "Save Approved Questions"}
+            </button>
+          </div>
         </div>
       )}
     </section>
