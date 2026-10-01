@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createSaveApprovedQuestionsHandler } from "../api/save-approved-questions.ts";
+import { validateGeneratedQuestions as validateSharedQuestions } from "../src/lib/course-question-validation.ts";
 
 const courseId = "c1000000-0000-4000-8000-000000000001";
 const sourceId = "d1000000-0000-4000-8000-000000000001";
 const reference = { source_id: sourceId, extraction_version: 3, page_number: 12 };
+const generationApiSource = readFileSync(new URL("../api/generate-course-questions.ts", import.meta.url), "utf8");
+const saveApiSource = readFileSync(new URL("../api/save-approved-questions.ts", import.meta.url), "utf8");
 
 function payload(count = 5, source = reference) {
   return {
@@ -120,4 +123,31 @@ test("questions stay temporary until the lecturer selects the explicit save acti
   assert.match(component, /Save Approved Questions/);
   assert.match(component, /Questions saved successfully\./);
   assert.match(component, /fetch\("\/api\/save-approved-questions"/);
+});
+test("both endpoints import the shared validator without importing another API route", () => {
+  assert.match(generationApiSource, /from ["']\.\.\/src\/lib\/course-question-validation\.ts["']/);
+  assert.match(saveApiSource, /from ["']\.\.\/src\/lib\/course-question-validation\.ts["']/);
+  assert.doesNotMatch(saveApiSource, /from ["']\.\/generate-course-questions(?:\.ts)?["']/);
+});
+
+test("the shared validator preserves question rules and exact source citation tuples", () => {
+  const page = {
+    course_name: "Computer science",
+    source_id: sourceId,
+    extraction_version: 3,
+    page_number: 12,
+    page_text: "Complete page evidence.",
+    relevant_text: "Relevant evidence.",
+  };
+  const approved = validateSharedQuestions(payload(), 5, [page]);
+  assert.equal(approved.length, 5);
+  assert.deepEqual(approved[0].sources, [reference]);
+  assert.throws(() => validateSharedQuestions(payload(4), 5, [page]), /count is invalid/);
+  const fabricated = payload();
+  fabricated.questions[0].sources = [{
+    source_id: "f1000000-0000-4000-8000-000000000001",
+    extraction_version: 1,
+    page_number: 1,
+  }];
+  assert.throws(() => validateSharedQuestions(fabricated, 5, [page]), /not part of retrieved context/);
 });
