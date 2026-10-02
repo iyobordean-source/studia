@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { InvalidQuestionOutputError, validateGeneratedQuestions } from "../src/lib/course-question-validation.js";
 import type { GeneratedQuestion, RetrievedCoursePage } from "../src/lib/course-question-validation.js";
+import type { GenerationQuestionCount, RegenerationQuestionCount } from "../src/lib/course-question-types.js";
 
 export { validateGeneratedQuestions };
 export type { GeneratedQuestion, RetrievedCoursePage };
@@ -19,14 +20,16 @@ const difficultyValues = ["easy", "medium", "hard"] as const;
 
 export type QuestionDifficulty = typeof difficultyValues[number];
 
-type GenerationRequest = {
+type GenerationRequestFields = {
   courseId: string;
   topic: string;
-  questionCount: 1 | 5 | 10;
   difficulty: QuestionDifficulty;
   resultLimit: number;
-  avoidQuestion?: string;
 };
+type GenerationRequest = GenerationRequestFields & (
+  | { questionCount: GenerationQuestionCount; avoidQuestion?: never }
+  | { questionCount: RegenerationQuestionCount; avoidQuestion: string }
+);
 type GeminiInput = GenerationRequest & {
   courseName: string;
   pages: RetrievedCoursePage[];
@@ -68,26 +71,24 @@ function parseGenerationRequest(value: unknown): GenerationRequest | null {
   const topic = value.topic.trim();
   if (topic.length < 2 || topic.length > 200) return null;
   if (value.questionCount !== 1 && value.questionCount !== 5 && value.questionCount !== 10) return null;
-  let avoidQuestion: string | undefined;
-  if (value.questionCount === 1) {
-    if (typeof value.avoidQuestion !== "string") return null;
-    avoidQuestion = value.avoidQuestion.trim();
-    if (avoidQuestion.length < 1 || avoidQuestion.length > 2000) return null;
-  } else if (value.avoidQuestion !== undefined) {
-    return null;
-  }
   if (typeof value.difficulty !== "string" || !difficultyValues.includes(value.difficulty as QuestionDifficulty)) return null;
   const resultLimit = value.resultLimit === undefined ? defaultResultLimit : value.resultLimit;
   if (typeof resultLimit !== "number" || !Number.isInteger(resultLimit) || resultLimit < 1 || resultLimit > maxResultLimit) return null;
 
-  return {
+  const fields: GenerationRequestFields = {
     courseId: value.courseId,
     topic,
-    questionCount: value.questionCount,
     difficulty: value.difficulty as QuestionDifficulty,
     resultLimit,
-    ...(avoidQuestion === undefined ? {} : { avoidQuestion }),
   };
+  if (value.questionCount === 1) {
+    if (typeof value.avoidQuestion !== "string") return null;
+    const avoidQuestion = value.avoidQuestion.trim();
+    if (avoidQuestion.length < 1 || avoidQuestion.length > 2000) return null;
+    return { ...fields, questionCount: 1, avoidQuestion };
+  }
+  if (value.avoidQuestion !== undefined) return null;
+  return { ...fields, questionCount: value.questionCount };
 }
 
 function validateRetrievedPages(value: unknown): RetrievedCoursePage[] {

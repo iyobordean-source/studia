@@ -15,7 +15,8 @@ export type GeneratedQuestion = {
   sources: Array<{ source_id: string; extraction_version: number; page_number: number }>;
 };
 
-export type QuestionCount = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+import type { QuestionCount } from "./course-question-types.js";
+export type { QuestionCount } from "./course-question-types.js";
 
 export declare class InvalidQuestionOutputError extends Error {}
 
