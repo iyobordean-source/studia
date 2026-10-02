@@ -498,7 +498,7 @@ test("generation limit rejects requests before Gemini and fails closed if unavai
   assert.equal(unavailable.state.generated.length, 0);
 });
 
-test("Gemini abort timeout returns a safe 504 response", async () => {
+test("Gemini abort timeout still raises GeminiRequestTimeoutError from the 30-second timeout", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (_url, init) => new Promise((_resolve, reject) => {
     init.signal.addEventListener("abort", () => reject(init.signal.reason), { once: true });
@@ -513,13 +513,68 @@ test("Gemini abort timeout returns a safe 504 response", async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
 
+test("Gemini fallback classification: timeout and transient HTTP call Groq; success and non-transient errors do not", async () => {
+  // 1. A Gemini client-side timeout is transient and falls back to Groq.
+  const timedOut = dependencies({
+    async generate(input) {
+      this.state.events.push("generate");
+      this.state.generated.push(input);
+      throw new GeminiRequestTimeoutError();
+    },
+  });
+  const timeoutResponse = await createCourseQuestionHandler(timedOut).fetch(request(validRequest));
+  assert.equal(timeoutResponse.status, 200);
+  assert.equal((await timeoutResponse.json()).questions.length, 5);
+  assert.deepEqual(timedOut.state.events, ["authenticate", "reserve", "retrieve", "generate", "groq"]);
+  assert.equal(timedOut.state.fallbackGenerated.length, 1);
+  assert.deepEqual(timedOut.state.fallbackGenerated[0], timedOut.state.generated[0]);
+
+  // 2. A transient Gemini HTTP error still falls back to Groq.
+  const unavailable = dependencies({
+    async generate(input) {
+      this.state.events.push("generate");
+      this.state.generated.push(input);
+      throw new GeminiHttpError(503);
+    },
+  });
+  const unavailableResponse = await createCourseQuestionHandler(unavailable).fetch(request(validRequest));
+  assert.equal(unavailableResponse.status, 200);
+  assert.deepEqual(unavailable.state.events, ["authenticate", "reserve", "retrieve", "generate", "groq"]);
+  assert.equal(unavailable.state.fallbackGenerated.length, 1);
+
+  // 3. A successful Gemini response never calls Groq.
+  const succeeded = dependencies();
+  const successResponse = await createCourseQuestionHandler(succeeded).fetch(request(validRequest));
+  assert.equal(successResponse.status, 200);
+  assert.deepEqual(succeeded.state.events, ["authenticate", "reserve", "retrieve", "generate"]);
+  assert.deepEqual(succeeded.state.fallbackGenerated, []);
+
+  // 4. A non-transient Gemini error never calls Groq.
+  const rejected = dependencies({
+    async generate(input) {
+      this.state.events.push("generate");
+      this.state.generated.push(input);
+      throw new GeminiHttpError(401);
+    },
+  });
+  const rejectedResponse = await createCourseQuestionHandler(rejected).fetch(request(validRequest));
+  assert.equal(rejectedResponse.status, 502);
+  assert.match((await rejectedResponse.json()).error, /could not be completed/);
+  assert.ok(!rejected.state.events.includes("groq"));
+  assert.deepEqual(rejected.state.fallbackGenerated, []);
+});
+
+test("a Gemini timeout without a fallback dependency keeps the safe 504 response", async () => {
   const handlerDependencies = dependencies({
     async generate() { throw new GeminiRequestTimeoutError(); },
+    generateFallback: undefined,
   });
   const response = await createCourseQuestionHandler(handlerDependencies).fetch(request(validRequest));
   assert.equal(response.status, 504);
   assert.match((await response.json()).error, /took too long/);
+  assert.deepEqual(handlerDependencies.state.fallbackGenerated, []);
 });
 
 test("the server endpoint authenticates with the caller token and reads Gemini credentials only from server env", () => {

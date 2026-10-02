@@ -56,6 +56,14 @@ export class GeminiHttpError extends Error {
 }
 class GroqFallbackError extends Error {}
 
+// Classifies which Gemini failures are safe to hand to the existing Groq fallback.
+// A client-side AbortSignal.timeout(30_000) is transient for the same reason a
+// transient HTTP status is: Groq can still serve the same grounded request.
+function isTransientGeminiFailure(error: unknown): boolean {
+  return error instanceof GeminiRequestTimeoutError
+    || (error instanceof GeminiHttpError && transientGeminiStatuses.has(error.statusCode));
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -413,9 +421,7 @@ export function createCourseQuestionHandler(dependencies: Dependencies) {
         try {
           generated = await dependencies.generate(modelInput);
         } catch (error) {
-          if (!(error instanceof GeminiHttpError)
-            || !transientGeminiStatuses.has(error.statusCode)
-            || !dependencies.generateFallback) {
+          if (!isTransientGeminiFailure(error) || !dependencies.generateFallback) {
             throw error;
           }
           usedFallback = true;
