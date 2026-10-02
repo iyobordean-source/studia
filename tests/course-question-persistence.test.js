@@ -97,6 +97,40 @@ test("malformed source references are rejected before saving", async () => {
   assert.deepEqual(deps.state.savedRows, []);
 });
 
+test("database failures are diagnosed safely while the client receives the generic error", async () => {
+  const databaseError = Object.assign(
+    new Error("Insert rejected for Question 1?; Bearer test-access-token; sb_publishable_FakeTestKey123456789"),
+    {
+      name: "PostgrestError",
+      code: "23505",
+      details: "Duplicate question: Question 1?",
+      hint: "Review the unique constraint.",
+    },
+  );
+  const deps = dependencies({ async saveQuestions() { throw databaseError; } });
+  const logged = [];
+  const originalError = console.error;
+  console.error = (...args) => logged.push(args);
+  let response;
+  try {
+    response = await createSaveApprovedQuestionsHandler(deps).fetch(request(payload()));
+  } finally {
+    console.error = originalError;
+  }
+
+  assert.equal(response.status, 500);
+  assert.deepEqual(await response.json(), { error: "Approved questions could not be saved. Try again." });
+  const diagnostic = JSON.stringify(logged);
+  assert.match(diagnostic, /supabase_insert/);
+  assert.match(diagnostic, /PostgrestError/);
+  assert.match(diagnostic, /23505/);
+  assert.match(diagnostic, /Duplicate question/);
+  assert.match(diagnostic, /Review the unique constraint/);
+  assert.doesNotMatch(diagnostic, /test-access-token/);
+  assert.doesNotMatch(diagnostic, /FakeTestKey123456789/);
+  assert.doesNotMatch(diagnostic, /Question 1\?/);
+});
+
 test("the question bank migration restricts every operation to the owning lecturer", () => {
   const migration = readFileSync(
     new URL("../supabase/migrations/20261001100000_course_question_bank.sql", import.meta.url),
