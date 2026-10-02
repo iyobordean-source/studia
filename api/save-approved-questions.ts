@@ -3,6 +3,7 @@ import {
   InvalidQuestionOutputError,
   validateGeneratedQuestions,
   type GeneratedQuestion,
+  type QuestionCount,
   type RetrievedCoursePage,
 } from "../src/lib/course-question-validation.js";
 
@@ -82,7 +83,8 @@ function createValidationPages(value: unknown): RetrievedCoursePage[] {
     || typeof value.courseId !== "string"
     || !courseIdPattern.test(value.courseId)
     || !Array.isArray(value.questions)
-    || ![5, 10].includes(value.questions.length)) {
+    || value.questions.length < 1
+    || value.questions.length > 10) {
     throw new Error("Invalid save request.");
   }
 
@@ -120,7 +122,7 @@ function createValidationPages(value: unknown): RetrievedCoursePage[] {
 
 function validateRows(value: unknown, pages: RetrievedCoursePage[]): QuestionRow[] {
   const questions = (value as { questions: unknown[] }).questions;
-  const validated = validateGeneratedQuestions(value, questions.length as 5 | 10, pages);
+  const validated = validateGeneratedQuestions(value, questions.length as QuestionCount, pages);
   return validated.map((question) => ({
     course_id: (value as { courseId: string }).courseId,
     question: question.question,

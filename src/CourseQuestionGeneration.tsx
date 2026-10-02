@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { LoaderCircle } from "lucide-react";
+import { validateGeneratedQuestions } from "./lib/course-question-validation.js";
 import { supabase, supabaseConfigurationError } from "./supabase";
 
 type QuestionDifficulty = "easy" | "medium" | "hard";
@@ -9,6 +10,15 @@ type GeneratedQuestion = {
   correctAnswer: string;
   explanation: string;
   sources: Array<{ source_id: string; extraction_version: number; page_number: number }>;
+};
+type QuestionDraft = {
+  id: string;
+  question: GeneratedQuestion;
+  selected: boolean;
+  editDraft: GeneratedQuestion | null;
+  editError: string;
+  regenerating: boolean;
+  regenerationError: string;
 };
 
 const sourceIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -66,6 +76,19 @@ function readGeneratedQuestions(value: unknown, expectedCount: number): Generate
   return questions;
 }
 
+function validateDraftQuestion(question: GeneratedQuestion): GeneratedQuestion {
+  const pages = [...new Map(question.sources.map((source) => {
+    const key = source.source_id.toLowerCase() + ":" + source.extraction_version + ":" + source.page_number;
+    return [key, {
+      course_name: "",
+      ...source,
+      page_text: "Source reference retained from the generated question.",
+      relevant_text: "Source reference retained from the generated question.",
+    }];
+  })).values()];
+  return validateGeneratedQuestions({ questions: [question] }, 1, pages)[0];
+}
+
 async function loadMaterialTitles(sourceIds: string[]): Promise<Record<string, string>> {
   if (!supabase || sourceIds.length === 0) return {};
   try {
@@ -98,6 +121,7 @@ async function loadMaterialTitles(sourceIds: string[]): Promise<Record<string, s
     return {};
   }
 }
+
 function errorMessage(error: unknown) {
   return error instanceof Error && error.message.trim()
     ? error.message
@@ -109,51 +133,75 @@ export function CourseQuestionGeneration({ courseId }: { courseId: string }) {
   const [topic, setTopic] = useState("");
   const [questionCount, setQuestionCount] = useState<5 | 10>(5);
   const [difficulty, setDifficulty] = useState<QuestionDifficulty>("medium");
-  const [questions, setQuestions] = useState<GeneratedQuestion[] | null>(null);
+  const [drafts, setDrafts] = useState<QuestionDraft[] | null>(null);
   const [materialTitles, setMaterialTitles] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [savedCount, setSavedCount] = useState(0);
   const [saveError, setSaveError] = useState("");
   const [error, setError] = useState("");
+  const draftSequence = useRef(0);
+  const regeneratingIds = useRef(new Set<string>());
+
+  const selectedDrafts = drafts?.filter((draft) => draft.selected) ?? [];
+  const selectedCount = selectedDrafts.length;
+  const selectedBusy = selectedDrafts.some((draft) => draft.editDraft !== null || draft.regenerating);
+
+  function makeDrafts(questions: GeneratedQuestion[]) {
+    return questions.map((question): QuestionDraft => ({
+      id: "question-" + (++draftSequence.current),
+      question,
+      selected: true,
+      editDraft: null,
+      editError: "",
+      regenerating: false,
+      regenerationError: "",
+    }));
+  }
+
+  async function requestGeneratedQuestions(body: Record<string, unknown>, expectedCount: number) {
+    if (!supabase) throw new Error(supabaseConfigurationError);
+    const { data, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
+    const accessToken = data.session?.access_token;
+    if (!accessToken) throw new Error("Your session has expired. Sign in again, then retry.");
+
+    const response = await fetch("/api/generate-course-questions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + accessToken,
+      },
+      body: JSON.stringify(body),
+    });
+    let result: unknown = null;
+    try {
+      result = await response.json();
+    } catch {
+      // Use the safe fallback below when the endpoint does not return JSON.
+    }
+    if (!response.ok) {
+      const message = isRecord(result) && typeof result.error === "string" && result.error.trim()
+        ? result.error
+        : "Question generation could not be completed. Please try again.";
+      throw new Error(message);
+    }
+
+    const generated = readGeneratedQuestions(result, expectedCount);
+    if (!generated) throw new Error("The generated questions could not be displayed. Please try again.");
+    return generated.map(validateDraftQuestion);
+  }
 
   async function generateQuestions(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setSubmitting(true);
     try {
-      if (!supabase) throw new Error(supabaseConfigurationError);
-      const { data, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) throw sessionError;
-      const accessToken = data.session?.access_token;
-      if (!accessToken) throw new Error("Your session has expired. Sign in again, then retry.");
-
-      const response = await fetch("/api/generate-course-questions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer " + accessToken,
-        },
-        body: JSON.stringify({ courseId, topic, questionCount, difficulty }),
-      });
-      let result: unknown = null;
-      try {
-        result = await response.json();
-      } catch {
-        // Use the safe fallback below when the endpoint does not return JSON.
-      }
-      if (!response.ok) {
-        const message = isRecord(result) && typeof result.error === "string" && result.error.trim()
-          ? result.error
-          : "Question generation could not be completed. Please try again.";
-        throw new Error(message);
-      }
-
-      const generated = readGeneratedQuestions(result, questionCount);
-      if (!generated) throw new Error("The generated questions could not be displayed. Please try again.");
+      const generated = await requestGeneratedQuestions({ courseId, topic, questionCount, difficulty }, questionCount);
       const sourceIds = [...new Set(generated.flatMap((question) => question.sources.map((source) => source.source_id)))];
       setMaterialTitles(await loadMaterialTitles(sourceIds));
-      setQuestions(generated);
+      setDrafts(makeDrafts(generated));
     } catch (requestError) {
       setError(errorMessage(requestError));
     } finally {
@@ -161,8 +209,92 @@ export function CourseQuestionGeneration({ courseId }: { courseId: string }) {
     }
   }
 
+  function updateDraft(draftId: string, update: (draft: QuestionDraft) => QuestionDraft) {
+    setDrafts((current) => current?.map((draft) => draft.id === draftId ? update(draft) : draft) ?? null);
+  }
+
+  async function regenerateQuestion(draftId: string) {
+    const draft = drafts?.find((item) => item.id === draftId);
+    if (!draft || saved || regeneratingIds.current.has(draftId)) return;
+    regeneratingIds.current.add(draftId);
+    updateDraft(draftId, (current) => ({ ...current, regenerating: true, regenerationError: "" }));
+    try {
+      const [replacement] = await requestGeneratedQuestions({
+        courseId,
+        topic,
+        questionCount: 1,
+        difficulty,
+        avoidQuestion: draft.question.question,
+      }, 1);
+      const newTitles = await loadMaterialTitles(replacement.sources.map((source) => source.source_id));
+      setMaterialTitles((current) => ({ ...current, ...newTitles }));
+      updateDraft(draftId, (current) => ({
+        ...current,
+        question: replacement,
+        regenerating: false,
+        regenerationError: "",
+      }));
+    } catch (requestError) {
+      updateDraft(draftId, (current) => ({
+        ...current,
+        regenerating: false,
+        regenerationError: errorMessage(requestError),
+      }));
+    } finally {
+      regeneratingIds.current.delete(draftId);
+    }
+  }
+
+  function beginEdit(draftId: string) {
+    updateDraft(draftId, (draft) => ({
+      ...draft,
+      editDraft: { ...draft.question, options: [...draft.question.options], sources: draft.question.sources.map((source) => ({ ...source })) },
+      editError: "",
+    }));
+  }
+
+  function applyEdit(draftId: string) {
+    const draft = drafts?.find((item) => item.id === draftId);
+    if (!draft?.editDraft) return;
+    try {
+      const validated = validateDraftQuestion({ ...draft.editDraft, sources: draft.question.sources });
+      updateDraft(draftId, (current) => ({ ...current, question: validated, editDraft: null, editError: "", regenerationError: "" }));
+    } catch {
+      updateDraft(draftId, (current) => ({
+        ...current,
+        editError: "Check the question, four distinct options, correct answer, and explanation before applying changes.",
+      }));
+    }
+  }
+
+  function cancelEdit(draftId: string) {
+    updateDraft(draftId, (draft) => ({ ...draft, editDraft: null, editError: "" }));
+  }
+
+  function removeDraft(draftId: string) {
+    if (saved) return;
+    setDrafts((current) => current?.filter((draft) => draft.id !== draftId) ?? null);
+  }
+
   async function saveApprovedQuestions() {
     setSaveError("");
+    if (!drafts || selectedCount === 0) {
+      setSaveError("Select at least one valid question to save.");
+      return;
+    }
+    if (selectedBusy) {
+      setSaveError("Finish editing or regenerating selected questions before saving.");
+      return;
+    }
+
+    let approvedQuestions: GeneratedQuestion[];
+    try {
+      approvedQuestions = selectedDrafts.map((draft) => validateDraftQuestion(draft.question));
+    } catch {
+      setSaveError("One or more selected questions are invalid. Edit them before saving.");
+      return;
+    }
+
     setSaving(true);
     try {
       if (!supabase) throw new Error(supabaseConfigurationError);
@@ -177,7 +309,7 @@ export function CourseQuestionGeneration({ courseId }: { courseId: string }) {
           "Content-Type": "application/json",
           Authorization: "Bearer " + accessToken,
         },
-        body: JSON.stringify({ courseId, questions }),
+        body: JSON.stringify({ courseId, questions: approvedQuestions }),
       });
       let result: unknown = null;
       try {
@@ -193,10 +325,11 @@ export function CourseQuestionGeneration({ courseId }: { courseId: string }) {
       }
       if (!isRecord(result)
         || !Array.isArray(result.savedQuestions)
-        || result.savedQuestions.length !== questions?.length
+        || result.savedQuestions.length !== approvedQuestions.length
         || !result.savedQuestions.every((item) => isRecord(item) && typeof item.id === "string" && sourceIdPattern.test(item.id))) {
         throw new Error("The saved questions could not be confirmed. Refresh the page before trying again.");
       }
+      setSavedCount(approvedQuestions.length);
       setSaved(true);
     } catch (requestError) {
       setSaveError(errorMessage(requestError));
@@ -206,8 +339,9 @@ export function CourseQuestionGeneration({ courseId }: { courseId: string }) {
   }
 
   function returnToForm() {
-    setQuestions(null);
+    setDrafts(null);
     setSaved(false);
+    setSavedCount(0);
     setSaveError("");
     setError("");
     setOpen(true);
@@ -219,13 +353,13 @@ export function CourseQuestionGeneration({ courseId }: { courseId: string }) {
       <h2 id="course-question-generation-title">Question generation</h2>
       <p className="course-question-intro">Create a question draft from relevant, processed pages in this course. Review every answer and source before using it.</p>
 
-      {!open && !questions && (
+      {!open && !drafts && (
         <button className="button button-primary course-question-open" type="button" onClick={() => setOpen(true)}>
           Generate Questions
         </button>
       )}
 
-      {open && !questions && (
+      {open && !drafts && (
         <form className="course-question-form" onSubmit={(event) => void generateQuestions(event)}>
           <label className="auth-field">
             <span>Topic</span>
@@ -287,66 +421,147 @@ export function CourseQuestionGeneration({ courseId }: { courseId: string }) {
         </form>
       )}
 
-      {questions && (
+      {drafts && (
         <div className="course-question-review" aria-live="polite">
           <div className="course-question-review-heading">
             <div>
               <p className="auth-kicker">DRAFT REVIEW</p>
-              <h3>{questions.length} questions on {topic.trim()}</h3>
+              <h3>{drafts.length} questions on {topic.trim()}</h3>
             </div>
-            <button className="button identity-secondary" type="button" onClick={returnToForm}>
+            <button className="button identity-secondary" type="button" onClick={returnToForm} disabled={saving}>
               Generate another set
             </button>
           </div>
-          <p className="course-question-review-note">{saved ? "These questions are saved in this course and have not been published." : "These questions have not been saved or published. Check the answer, explanation, and page sources before use."}</p>
+          <p className="course-question-review-note">{saved ? `${savedCount} selected questions are saved in this course and have not been published.` : "New questions are selected by default. Adjust the selection, edit or replace individual drafts, and save only the questions you approve."}</p>
+          {drafts.length === 0 && <p className="course-question-empty" role="status">No question drafts remain. Generate another set to continue.</p>}
+          <p className="course-question-selection-count" aria-live="polite">{selectedCount} of {drafts.length} questions selected</p>
+          {selectedCount === 0 && drafts.length > 0 && <p className="course-question-empty" role="status">Select at least one question to enable saving.</p>}
           <ol className="course-question-list" aria-label="Generated question drafts">
-            {questions.map((question, questionIndex) => (
-              <li className="course-question-item" key={questionIndex}>
-                <article>
-                  <h4><span>Question {questionIndex + 1}</span>{question.question}</h4>
-                  <ol className="course-question-options" type="A" aria-label={"Options for question " + (questionIndex + 1)}>
-                    {question.options.map((option, optionIndex) => {
-                      const correct = option === question.correctAnswer;
-                      return (
-                        <li className={correct ? "is-correct" : undefined} key={optionIndex}>
-                          <span className="course-question-option-copy">
-                            <span className="course-question-option-letter">{String.fromCharCode(65 + optionIndex)}.</span>
-                            <span>{option}</span>
-                          </span>
-                          {correct && <span className="course-question-correct-label">Correct answer</span>}
-                        </li>
-                      );
-                    })}
-                  </ol>
-                  <div className="course-question-explanation">
-                    <h5>Explanation</h5>
-                    <p>{question.explanation}</p>
-                  </div>
-                  <div className="course-question-sources">
-                    <h5>Sources</h5>
-                    <ul>
-                      {question.sources.map((source) => (
-                        <li className="course-question-citation" key={source.source_id + "-" + source.extraction_version + "-" + source.page_number}>
-                          {materialTitles[source.source_id.toLowerCase()] || "Course material"} · Page {source.page_number}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </article>
-              </li>
-            ))}
+            {drafts.map((draft, questionIndex) => {
+              const question = draft.question;
+              const editable = draft.editDraft;
+              return (
+                <li className="course-question-item" key={draft.id}>
+                  <article>
+                    <div className="course-question-item-toolbar">
+                      <label className="course-question-select">
+                        <input
+                          type="checkbox"
+                          checked={draft.selected}
+                          onChange={(event) => updateDraft(draft.id, (current) => ({ ...current, selected: event.target.checked }))}
+                          disabled={saved || saving}
+                          aria-label={`Select question ${questionIndex + 1} for saving`}
+                        />
+                        <span>Include in saved questions</span>
+                      </label>
+                      <div className="course-question-item-actions">
+                        <button type="button" className="button identity-secondary" aria-label={"Edit question " + (questionIndex + 1)} onClick={() => beginEdit(draft.id)} disabled={saved || saving || draft.regenerating || editable !== null}>
+                          Edit
+                        </button>
+                        <button type="button" className="button identity-secondary" aria-label={draft.regenerating ? "Regenerating question " + (questionIndex + 1) : "Regenerate question " + (questionIndex + 1)} onClick={() => void regenerateQuestion(draft.id)} disabled={saved || saving || draft.regenerating || editable !== null}>
+                          {draft.regenerating && <LoaderCircle aria-hidden="true" size={15} className="auth-spinner" />}
+                          {draft.regenerating ? "Regenerating…" : "Regenerate"}
+                        </button>
+                        <button type="button" className="button identity-secondary" aria-label={"Remove question " + (questionIndex + 1)} onClick={() => removeDraft(draft.id)} disabled={saved || saving || draft.regenerating}>
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                    {draft.regenerating && <p className="course-feedback" role="status" aria-live="polite"><LoaderCircle aria-hidden="true" size={15} className="auth-spinner" /> Regenerating this question from course materials…</p>}
+                    {draft.regenerationError && <p className="course-question-inline-error" role="alert">{draft.regenerationError} The existing question is unchanged.</p>}
+
+                    {editable ? (
+                      <form className="course-question-edit-form" onSubmit={(event) => { event.preventDefault(); applyEdit(draft.id); }}>
+                        <label className="auth-field">
+                          <span>Question</span>
+                          <textarea value={editable.question} onChange={(event) => updateDraft(draft.id, (current) => current.editDraft ? ({ ...current, editDraft: { ...current.editDraft, question: event.target.value }, editError: "" }) : current)} maxLength={2000} required />
+                        </label>
+                        <fieldset className="course-question-edit-options">
+                          <legend>Four answer options</legend>
+                          {editable.options.map((option, optionIndex) => (
+                            <label className="auth-field" key={optionIndex}>
+                              <span>Option {String.fromCharCode(65 + optionIndex)}</span>
+                              <input
+                                value={option}
+                                onChange={(event) => updateDraft(draft.id, (current) => {
+                                  if (!current.editDraft) return current;
+                                  const options = [...current.editDraft.options];
+                                  const previousOption = options[optionIndex];
+                                  options[optionIndex] = event.target.value;
+                                  const correctAnswer = current.editDraft.correctAnswer === previousOption ? event.target.value : current.editDraft.correctAnswer;
+                                  return { ...current, editDraft: { ...current.editDraft, options, correctAnswer }, editError: "" };
+                                })}
+                                maxLength={500}
+                                required
+                              />
+                            </label>
+                          ))}
+                        </fieldset>
+                        <label className="auth-field">
+                          <span>Correct answer</span>
+                          <select value={editable.correctAnswer} onChange={(event) => updateDraft(draft.id, (current) => current.editDraft ? ({ ...current, editDraft: { ...current.editDraft, correctAnswer: event.target.value }, editError: "" }) : current)}>
+                            {editable.options.map((option, optionIndex) => <option key={optionIndex} value={option}>{String.fromCharCode(65 + optionIndex)}. {option || "Enter an option"}</option>)}
+                          </select>
+                        </label>
+                        <label className="auth-field">
+                          <span>Explanation</span>
+                          <textarea value={editable.explanation} onChange={(event) => updateDraft(draft.id, (current) => current.editDraft ? ({ ...current, editDraft: { ...current.editDraft, explanation: event.target.value }, editError: "" }) : current)} maxLength={3000} required />
+                        </label>
+                        {draft.editError && <p className="course-question-inline-error" role="alert">{draft.editError}</p>}
+                        <div className="course-question-actions">
+                          <button className="button button-primary" type="submit">Apply changes</button>
+                          <button className="button identity-secondary" type="button" onClick={() => cancelEdit(draft.id)}>Cancel edit</button>
+                        </div>
+                      </form>
+                    ) : (
+                      <>
+                        <h4><span>Question {questionIndex + 1}</span>{question.question}</h4>
+                        <ol className="course-question-options" type="A" aria-label={`Options for question ${questionIndex + 1}`}>
+                          {question.options.map((option, optionIndex) => {
+                            const correct = option === question.correctAnswer;
+                            return (
+                              <li className={correct ? "is-correct" : undefined} key={optionIndex}>
+                                <span className="course-question-option-copy">
+                                  <span className="course-question-option-letter">{String.fromCharCode(65 + optionIndex)}.</span>
+                                  <span>{option}</span>
+                                </span>
+                                {correct && <span className="course-question-correct-label">Correct answer</span>}
+                              </li>
+                            );
+                          })}
+                        </ol>
+                        <div className="course-question-explanation">
+                          <h5>Explanation</h5>
+                          <p>{question.explanation}</p>
+                        </div>
+                        <div className="course-question-sources">
+                          <h5>Sources</h5>
+                          <ul>
+                            {question.sources.map((source) => (
+                              <li className="course-question-citation" key={source.source_id + "-" + source.extraction_version + "-" + source.page_number}>
+                                {materialTitles[source.source_id.toLowerCase()] || "Course material"} · Page {source.page_number}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </>
+                    )}
+                  </article>
+                </li>
+              );
+            })}
           </ol>
           <div className="course-question-actions">
             {saveError && <p className="auth-error" role="alert">{saveError}</p>}
-            {saved && <p className="course-feedback" role="status">Questions saved successfully.</p>}
+            {saved && <p className="course-feedback" role="status">Selected questions saved successfully.</p>}
             <button
               className="button button-primary"
               type="button"
               onClick={() => void saveApprovedQuestions()}
-              disabled={saving || saved}
+              disabled={saving || saved || selectedCount === 0 || selectedBusy}
             >
               {saving && <LoaderCircle aria-hidden="true" size={16} className="auth-spinner" />}
-              {saving ? "Saving questions…" : saved ? "Questions saved" : "Save Approved Questions"}
+              {saving ? "Saving questions…" : saved ? "Questions saved" : `Save ${selectedCount} selected question${selectedCount === 1 ? "" : "s"}`}
             </button>
           </div>
         </div>

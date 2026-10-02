@@ -70,6 +70,17 @@ test("authorized lecturer explicitly saves validated questions and receives save
   assert.equal(deps.state.savedRows[0].rows[0].course_id, courseId);
 });
 
+test("partial lecturer selection saves only the supplied selected questions", async () => {
+  const selected = payload(5);
+  selected.questions = [selected.questions[0], selected.questions[2], selected.questions[4]];
+  const deps = dependencies();
+  const response = await createSaveApprovedQuestionsHandler(deps).fetch(request(selected));
+  assert.equal(response.status, 201);
+  assert.equal((await response.json()).savedQuestions.length, 3);
+  assert.equal(deps.state.savedRows[0].rows.length, 3);
+  assert.deepEqual(deps.state.savedRows[0].rows.map((row) => row.source_references), [[reference], [reference], [reference]]);
+});
+
 test("a user without course ownership cannot save questions", async () => {
   const deps = dependencies({ async ownsCourse() { return false; } });
   const response = await createSaveApprovedQuestionsHandler(deps).fetch(request(payload()));
@@ -154,8 +165,8 @@ test("questions stay temporary until the lecturer selects the explicit save acti
     component.indexOf("async function saveApprovedQuestions"),
   );
   assert.doesNotMatch(generateAction, /save-approved-questions|course_questions/);
-  assert.match(component, /Save Approved Questions/);
-  assert.match(component, /Questions saved successfully\./);
+  assert.match(component, /Save \$\{selectedCount\} selected question/);
+  assert.match(component, /Selected questions saved successfully\./);
   assert.match(component, /fetch\("\/api\/save-approved-questions"/);
 });
 test("both endpoints import the shared JavaScript validator without raw TypeScript or API-route imports", () => {

@@ -22,7 +22,7 @@ Course materials -> Course Brain and course-scoped RAG -> grounded assessment ge
 - Git and GitHub
 - Lucide React for interface icons
 
-Only the libraries needed for the current scope are installed. Supabase Auth, identity, courses, enrollment, course materials, and source status are working in production. The PDF.js worker-bundle and DOMMatrix runtime fixes and diagnostic deployment are complete. Production extraction was verified with CS101 reaching `ready`. The page-traceability, retrieval, and course-question-bank migrations are local and unapplied; page-aware extraction, retrieval, Gemini question generation, and explicit question saving are not active in production.
+Only the libraries needed for the current scope are installed. Supabase Auth, identity, courses, enrollment, course materials, and source status are working in production. The PDF.js worker-bundle and DOMMatrix runtime fixes and diagnostic deployment are complete. Production extraction was verified with CS101 reaching `ready`. The page-traceability, retrieval, and course-question-bank migrations are local and unapplied; page-aware extraction, retrieval, Gemini question generation, and explicit question saving are not active in production. The local lecturer review UI now supports per-question selection, editing, temporary removal, and single-question regeneration through the existing grounded generation endpoint; selected questions remain unsaved until the explicit save action and this updated UI is not deployed.
 
 ## Documentation
 

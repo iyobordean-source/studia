@@ -179,6 +179,61 @@ test("empty retrieval still consumes a reserved slot", async () => {
   assert.equal(deps.state.generated.length, 0);
 });
 
+test("single-question regeneration uses the authenticated generation flow and existing provider fallback", async () => {
+  const deps = dependencies();
+  deps.generate = async (input) => {
+    deps.state.events.push("generate");
+    assert.equal(input.questionCount, 1);
+    assert.equal(input.avoidQuestion, "Question to replace?");
+    throw new GeminiHttpError(503);
+  };
+  deps.generateFallback = async (input) => {
+    deps.state.events.push("groq");
+    assert.equal(input.questionCount, 1);
+    assert.equal(input.avoidQuestion, "Question to replace?");
+    return makeQuestions(1);
+  };
+  const response = await createCourseQuestionHandler(deps).fetch(request({
+    ...validRequest,
+    questionCount: 1,
+    avoidQuestion: "Question to replace?",
+  }));
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.questions.length, 1);
+  assert.deepEqual(result.questions[0].sources, [{ source_id: sourceId, extraction_version: 2, page_number: 4 }]);
+  assert.deepEqual(deps.state.events, ["authenticate", "reserve", "retrieve", "generate", "groq"]);
+  assert.equal(deps.state.reserved.length, 1);
+  assert.equal(deps.state.retrieved[0].input.topic, validRequest.topic);
+});
+
+test("single-question regeneration rejects citations outside retrieved course pages", async () => {
+  const deps = dependencies({
+    async generate() {
+      return makeQuestions(1, [{ source_id: "e1000000-0000-4000-8000-000000000001", extraction_version: 2, page_number: 4 }]);
+    },
+  });
+  const response = await createCourseQuestionHandler(deps).fetch(request({
+    ...validRequest,
+    questionCount: 1,
+    avoidQuestion: "Question to replace?",
+  }));
+  assert.equal(response.status, 502);
+  assert.match((await response.json()).error, /No questions were saved/);
+  assert.equal(deps.state.reserved.length, 1);
+});
+
+test("single-question mode requires a bounded avoid-question reference", async () => {
+  const deps = dependencies();
+  const handler = createCourseQuestionHandler(deps);
+  assert.equal((await handler.fetch(request({ ...validRequest, questionCount: 1 }))).status, 400);
+  assert.equal((await handler.fetch(request({ ...validRequest, avoidQuestion: "not a regeneration" }))).status, 400);
+  assert.equal((await handler.fetch(request({ ...validRequest, questionCount: 1, avoidQuestion: "x".repeat(2001) }))).status, 400);
+  assert.deepEqual(deps.state.authenticated, []);
+  assert.deepEqual(deps.state.reserved, []);
+  assert.deepEqual(deps.state.retrieved, []);
+});
+
 test("generated questions must match count, four distinct options, answer, and retrieved citations", () => {
   const pages = [retrievedPage];
   assert.equal(validateGeneratedQuestions(makeQuestions(), 5, pages).length, 5);
@@ -253,6 +308,41 @@ test("Gemini uses stateless structured output and keeps its API key server-side"
   assert.equal(body.generation_config.max_output_tokens, 8192);
   assert.match(body.system_instruction, /difficulty level/);
   assert.match(body.system_instruction, /two sentences/);
+});
+
+test("single-question Gemini input includes only the question-to-avoid hint and matched grounding", async () => {
+  const originalFetch = globalThis.fetch;
+  let capturedRequest;
+  globalThis.fetch = async (url, init) => {
+    capturedRequest = { url: String(url), init };
+    return Response.json({
+      status: "completed",
+      steps: [{ type: "model_output", content: [{ type: "text", text: JSON.stringify(makeQuestions(1)) }] }],
+    });
+  };
+  try {
+    const input = {
+      ...validRequest,
+      questionCount: 1,
+      avoidQuestion: "Question to replace?",
+      resultLimit: 8,
+      courseName: retrievedPage.course_name,
+      pages: [retrievedPage],
+    };
+    await requestGemini("test-only-gemini-key", input);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  const body = JSON.parse(capturedRequest.init.body);
+  const modelInput = JSON.parse(body.input);
+  assert.equal(modelInput.avoidQuestion, "Question to replace?");
+  assert.deepEqual(modelInput.retrievedPages, [{
+    source_id: sourceId,
+    extraction_version: 2,
+    page_number: 4,
+    relevant_text: retrievedPage.relevant_text,
+  }]);
+  assert.match(body.system_instruction, /use the supplied question only to avoid repeating its wording or idea/);
 });
 
 test("Gemini failure diagnostics log redacted provider details without exposing them to callers", async () => {
